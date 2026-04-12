@@ -198,10 +198,12 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
 }
 
 /* ---- SVG hex states ---- */
-.hex-normal   { fill: none;                    stroke: #00cc66; stroke-width: 1.5; opacity: 0.35; }
-.hex-hover    { fill: rgba(255,255,255,0.08);  stroke: #fff;    stroke-width: 2;   opacity: 0.7; }
-.hex-selected { fill: rgba(255,210,0,0.25);    stroke: #ffd700; stroke-width: 2.5; opacity: 1; }
-.hex-adjacent { fill: rgba(0,180,255,0.25);    stroke: #00bbff; stroke-width: 2;   opacity: 1; }
+.hex-normal    { fill: none;                     stroke: #00cc66; stroke-width: 1.5; opacity: 0.35; }
+.hex-hover     { fill: rgba(255,255,255,0.08);   stroke: #fff;    stroke-width: 2;   opacity: 0.7; }
+.hex-selected  { fill: rgba(255,210,0,0.25);     stroke: #ffd700; stroke-width: 2.5; opacity: 1; }
+.hex-adjacent  { fill: rgba(0,180,255,0.25);     stroke: #00bbff; stroke-width: 2;   opacity: 1; }
+.hex-reachable { fill: rgba(30,120,255,0.20);    stroke: #4488ff; stroke-width: 2;   opacity: 1; }
+.hex-stop      { fill: rgba(255,140,0,0.25);     stroke: #ff8c00; stroke-width: 2;   opacity: 1; }
 
 .hex-label { fill: #00cc66; font-size: 10px; opacity: 0.45; pointer-events: none; user-select: none; }
 
@@ -247,8 +249,9 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
 
 <!-- Legend -->
 <div id="legend">
-  <div class="leg-item"><div class="leg-swatch" style="background:rgba(255,210,0,.5);border:1px solid #ffd700"></div>選択中の駒</div>
-  <div class="leg-item"><div class="leg-swatch" style="background:rgba(0,180,255,.4);border:1px solid #00bbff"></div>移動可能ヘックス（隣接）</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:rgba(255,210,0,.5);border:1px solid #ffd700"></div>選択中のユニット</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:rgba(30,120,255,.4);border:1px solid #4488ff"></div>移動可能ヘックス</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:rgba(255,140,0,.4);border:1px solid #ff8c00"></div>停止必須（難地形・Enemy Threat）</div>
   <div class="leg-item"><div class="leg-swatch" style="background:rgba(0,204,102,.15);border:1px solid #00cc66"></div>通常ヘックス</div>
 </div>
 
@@ -561,11 +564,39 @@ function isRidgeBlocking(addr) {
 }
 
 // ============================================================
-// ゲーム状態
+// ゲームデータ — 河川・道路
 // ============================================================
-let piece = { col: 10, row: 8 };   // 駒位置（1-indexed label）
-let selected = false;               // 選択中フラグ
-let adjacentSet = new Set();        // 移動可能ヘックスのアドレスSet
+// 河川ヘックスサイド: "ADDR1|ADDR2" 形式（辞書順で正規化）
+// 例: riverHexsides.add('0508|0608')
+const riverHexsides = new Set();
+
+// 道路ヘックス: road hex のアドレス集合
+// 例: roadHexes.add('0102')
+const roadHexes = new Set();
+
+// プロイセン展開フラグ（19xx/20xx制限に使用）
+let prussianDeployed = false;
+
+// ============================================================
+// ゲーム状態 — ユニット
+// ============================================================
+
+/**
+ * ユニット定義
+ * type: 'infantry' | 'artillery' | 'HC' | 'LC'
+ * army: 'french' | 'allied' | 'prussian'
+ * small: スモールユニット（スタック許容）
+ */
+const units = [
+  { id: 'fr1', col: 10, row: 10, type: 'infantry', army: 'french',  small: false, imageHref: 'images/foy_II_front.png' },
+  { id: 'fr2', col: 14, row: 11, type: 'HC',        army: 'french',  small: false, imageHref: 'images/lheritier_IIIC_front.png' },
+  { id: 'fr3', col:  6, row: 11, type: 'LC',         army: 'french',  small: false, imageHref: 'images/pire_II_front.png' },
+  { id: 'al1', col: 10, row:  7, type: 'infantry',  army: 'allied',  small: false, imageHref: 'images/jerome_II_front.png' },
+  { id: 'al2', col:  8, row:  7, type: 'HC',         army: 'allied',  small: false, imageHref: 'images/bachelu_II_front.png' },
+];
+
+let selectedUnitId = null;          // 選択中ユニットID
+const reachableMap = new Map();     // addr → mustStop（true=停止必須）
 
 // ============================================================
 // SVG管理
@@ -573,9 +604,9 @@ let adjacentSet = new Set();        // 移動可能ヘックスのアドレスSe
 const svg = document.getElementById('hex-svg');
 const mapImg = document.getElementById('map-img');
 
-// hexEls: addr → { poly }  ← createHexGrid が返す Map をそのまま使う
+// hexEls: addr → SVGPolygonElement（createHexGrid が返す Map）
 let hexEls = new Map();
-let pieceEl = null;
+let unitsLayerEl = null;
 
 function setupSVG(W, H) {
   svg.setAttribute('width',   W);
@@ -593,6 +624,10 @@ function setupSVG(W, H) {
     labelClass: 'hex-label',
     groupId:    'hex-grid',
   });
+
+  // ユニット描画レイヤー（グリッド線の上）
+  unitsLayerEl = makeSVGEl('g', { id: 'units-layer' });
+  svg.appendChild(unitsLayerEl);
 
   svg.addEventListener('mousemove',  onMouseMove);
   svg.addEventListener('click',      onMouseClick);
@@ -654,8 +689,10 @@ function onMouseMove(e) {
 }
 
 function isHighlighted(addr) {
-  const pieceAddr = hexAddr(piece.col, piece.row);
-  return addr === pieceAddr || adjacentSet.has(addr);
+  if (!selectedUnitId) return false;
+  const unit = units.find(u => u.id === selectedUnitId);
+  if (!unit) return false;
+  return addr === hexAddr(unit.col, unit.row) || reachableMap.has(addr);
 }
 
 function onMouseClick(e) {
@@ -671,55 +708,141 @@ function onMouseClick(e) {
     return;
   }
 
-  const pieceAddr = hexAddr(piece.col, piece.row);
-
-  if (!selected) {
-    if (h.addr === pieceAddr) {
-      // 駒を選択
-      selected = true;
-      computeAdjacent();
-      refreshHighlights();
-      setHudState('選択中 — 青いヘックスをクリックして移動');
-    }
-  } else {
-    if (adjacentSet.has(h.addr)) {
-      // 移動
-      movePiece(h.col, h.row);
-    } else if (h.addr === pieceAddr) {
-      // 選択解除
-      deselect();
+  if (selectedUnitId !== null) {
+    if (reachableMap.has(h.addr)) {
+      // 移動実行
+      moveUnit(selectedUnitId, h.col, h.row);
     } else {
-      // 他のヘックスをクリック → 選択解除
+      // 移動先以外をクリック → 選択解除
       deselect();
     }
   }
+  // ユニットのない空ヘックスを選択解除以外の目的でクリックしても何もしない
 }
 
 function deselect() {
-  selected = false;
-  adjacentSet.clear();
+  selectedUnitId = null;
+  reachableMap.clear();
   refreshHighlights();
   setHudState('待機中');
+  drawAllUnits();
 }
 
-function computeAdjacent() {
-  adjacentSet.clear();
-  const cube = labelToCube(piece.col, piece.row);
-  for (const n of layout.neighbors(cube)) {
-    const { col, row } = cubeToLabel(n);
-    if (inBounds(col, row)) {
-      adjacentSet.add(hexAddr(col, row));
+// ============================================================
+// 移動力・BFS用ヘルパー
+// ============================================================
+
+function getMA(type) {
+  if (type === 'HC') return 3;
+  if (type === 'LC') return 4;
+  return 2; // infantry / artillery
+}
+
+/** 河川ヘックスサイドキー（辞書順正規化） */
+function riverKey(a, b) { return a < b ? `${a}|${b}` : `${b}|${a}`; }
+
+/** 河川越えか（道路経由なら false） */
+function isRiverCrossing(fromAddr, toAddr) {
+  if (!riverHexsides.has(riverKey(fromAddr, toAddr))) return false;
+  // 両方が道路ヘックスなら道路（橋）経由とみなす
+  return !(roadHexes.has(fromAddr) && roadHexes.has(toAddr));
+}
+
+/** 道路経由移動か（難地形ペナルティ回避判定に使用） */
+function isOnRoad(fromAddr, toAddr) {
+  return roadHexes.has(fromAddr) && roadHexes.has(toAddr);
+}
+
+/** addr にいる全ユニットを返す */
+function getUnitsAt(addr) {
+  return units.filter(u => hexAddr(u.col, u.row) === addr);
+}
+
+/** addr の隣接ヘックスに敵ユニットがいるか */
+function isEnemyAdjacentTo(addr, movingArmy) {
+  for (const nAddr of neighborAddrs(addr)) {
+    if (getUnitsAt(nAddr).some(u => u.army !== movingArmy)) return true;
+  }
+  return false;
+}
+
+/**
+ * movingUnit が addr に停止できるか（スタックルール）
+ * 敵ユニットは既に進入ブロック済みなので friendly のみチェック
+ */
+function canLandAt(addr, movingUnit) {
+  const occupants = getUnitsAt(addr).filter(u => u.id !== movingUnit.id);
+  const friendly  = occupants.filter(u => u.army === movingUnit.army);
+  if (friendly.length === 0) return true;
+  if (friendly.length === 1) return movingUnit.small || friendly[0].small;
+  return false; // 2体以上は不可
+}
+
+/**
+ * BFS で移動可能ヘックスを計算し reachableMap を更新
+ * reachableMap: addr → mustStop（true=停止必須）
+ */
+function computeReachable(unit) {
+  reachableMap.clear();
+  const MA = getMA(unit.type);
+  const startAddr = hexAddr(unit.col, unit.row);
+
+  // addr → 到達最小コスト
+  const costMap = new Map([[startAddr, 0]]);
+  const queue   = [{ addr: startAddr, cost: 0 }];
+
+  while (queue.length > 0) {
+    const { addr, cost } = queue.shift();
+
+    for (const nAddr of neighborAddrs(addr)) {
+      // ① 河川越えブロック
+      if (isRiverCrossing(addr, nAddr)) continue;
+
+      // ② 敵ユニット占有ヘックスは進入不可
+      if (getUnitsAt(nAddr).some(u => u.army !== unit.army)) continue;
+
+      // ③ 移動コスト計算（登り坂は 2）
+      const moveCost = getMoveCost(addr, nAddr);
+      const newCost  = cost + moveCost;
+      if (newCost > MA) continue;
+
+      // ④ 既に同コスト以下で訪問済み → スキップ
+      if ((costMap.get(nAddr) ?? Infinity) <= newCost) continue;
+      costMap.set(nAddr, newCost);
+
+      // ⑤ Prussian Zone Restriction（フランスのみ）
+      const col = parseInt(nAddr.slice(0, 2), 10);
+      if (unit.army === 'french' && !prussianDeployed && (col === 19 || col === 20)) continue;
+
+      // ⑥ 停止条件の判定
+      const terrain    = getTerrain(nAddr);
+      const onRoad     = isOnRoad(addr, nAddr);
+      const isDifficult = ['woods', 'buildings', 'walled_buildings'].includes(terrain) && !onRoad;
+      const hasEnemyAdj = isEnemyAdjacentTo(nAddr, unit.army);
+      const mustStop    = isDifficult || hasEnemyAdj;
+
+      // ⑦ 終了地点として有効か（スタックルール）
+      if (canLandAt(nAddr, unit)) {
+        reachableMap.set(nAddr, mustStop);
+      }
+
+      // ⑧ 停止不要ならBFSを継続（友軍占有でも通過は可）
+      if (!mustStop) {
+        queue.push({ addr: nAddr, cost: newCost });
+      }
     }
   }
 }
 
 function refreshHighlights() {
-  const pieceAddr = hexAddr(piece.col, piece.row);
+  const selUnit = selectedUnitId ? units.find(u => u.id === selectedUnitId) : null;
+  const selAddr = selUnit ? hexAddr(selUnit.col, selUnit.row) : null;
+
   for (const addr of hexEls.keys()) {
-    if (selected && addr === pieceAddr) {
+    if (selAddr && addr === selAddr) {
       setHexClass(addr, 'hex-selected');
-    } else if (selected && adjacentSet.has(addr)) {
-      setHexClass(addr, 'hex-adjacent');
+    } else if (reachableMap.has(addr)) {
+      setHexClass(addr, reachableMap.get(addr) ? 'hex-stop' : 'hex-reachable');
     } else {
       setHexClass(addr, addr === lastHoverAddr ? 'hex-hover' : 'hex-normal');
     }
@@ -736,48 +859,86 @@ function setHudState(msg) {
 }
 
 // ============================================================
-// 駒描画
+// ユニット描画
 // ============================================================
-function drawPiece() {
-  if (pieceEl) pieceEl.remove();
+const IW = 64, IH = 64;
 
-  const col = toIdx(piece.col), row = toIdx(piece.row);
-  const { x, y } = layout.hexToPixel(col, row);
-  const addr = hexAddr(piece.col, piece.row);
+/** 全ユニットを再描画 */
+function drawAllUnits() {
+  if (!unitsLayerEl) return;
+  unitsLayerEl.innerHTML = '';
 
-  const g = makeSVGEl('g', { id: 'piece', 'pointer-events': 'none' });
+  for (const unit of units) {
+    const col = toIdx(unit.col), row = toIdx(unit.row);
+    const { x, y } = layout.hexToPixel(col, row);
+    const isSelected = unit.id === selectedUnitId;
 
-  // 駒画像（80x80px → ヘックスに収まる64x64で表示）
-  const IW = 64, IH = 64;
-  const img = makeSVGEl('image', {
-    href: 'images/1_braun_IV_back.png',
-    x: x - IW / 2, y: y - IH / 2,
-    width: IW, height: IH,
-  });
+    const g = makeSVGEl('g', {
+      'data-unit-id': unit.id,
+      cursor: 'pointer',
+    });
+    // pointer-events は SVG 属性として設定
+    g.setAttribute('pointer-events', 'all');
 
-  // 選択インジケーター（選択時に輝く外枠）
-  const glow = makeSVGEl('rect', {
-    x: x - IW / 2 - 3, y: y - IH / 2 - 3,
-    width: IW + 6, height: IH + 6,
-    fill: 'none',
-    stroke: selected ? '#ffd700' : 'none',
-    'stroke-width': '2.5', rx: '6',
-  });
+    // 選択ハイライト枠
+    const glow = makeSVGEl('rect', {
+      x: x - IW / 2 - 3, y: y - IH / 2 - 3,
+      width: IW + 6, height: IH + 6,
+      fill: 'none',
+      stroke: isSelected ? '#ffd700' : 'none',
+      'stroke-width': '2.5', rx: '6',
+    });
 
-  g.appendChild(glow);
-  g.appendChild(img);
-  svg.appendChild(g);
-  pieceEl = g;
+    // ユニット画像
+    const img = makeSVGEl('image', {
+      href: unit.imageHref,
+      x: x - IW / 2, y: y - IH / 2,
+      width: IW, height: IH,
+    });
 
-  document.getElementById('hud-piece').textContent = addr;
+    // 軍色のアンダーライン
+    const armyColors = { french: '#5bb5ff', allied: '#ff8888', prussian: '#aaaaaa' };
+    const bar = makeSVGEl('rect', {
+      x: x - IW / 2, y: y + IH / 2 - 5,
+      width: IW, height: 5,
+      fill: armyColors[unit.army] || '#aaa',
+      opacity: '0.8', rx: '2',
+    });
+
+    g.appendChild(glow);
+    g.appendChild(img);
+    g.appendChild(bar);
+    unitsLayerEl.appendChild(g);
+
+    // ユニットクリックで選択（SVGへの伝播を止める）
+    g.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (terrainEditMode) return;
+      if (selectedUnitId === unit.id) {
+        deselect();
+      } else {
+        selectedUnitId = unit.id;
+        computeReachable(unit);
+        refreshHighlights();
+        drawAllUnits();
+        document.getElementById('hud-piece').textContent = hexAddr(unit.col, unit.row);
+        setHudState(`${unit.id} 選択中 (MA=${getMA(unit.type)}) — 移動先をクリック`);
+      }
+    });
+  }
 }
 
-function movePiece(col, row) {
-  piece = { col, row };
-  selected = false;
-  adjacentSet.clear();
+/** ユニットを移動し、選択解除・再描画 */
+function moveUnit(unitId, col, row) {
+  const unit = units.find(u => u.id === unitId);
+  if (!unit) return;
+  unit.col = col;
+  unit.row = row;
+  selectedUnitId = null;
+  reachableMap.clear();
   refreshHighlights();
-  drawPiece();
+  drawAllUnits();
+  document.getElementById('hud-piece').textContent = hexAddr(col, row);
   setHudState('待機中');
 }
 
@@ -841,7 +1002,7 @@ viewport.addEventListener('contextmenu', e => e.preventDefault());
 
 // Escで選択解除
 window.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && selected) deselect();
+  if (e.key === 'Escape' && selectedUnitId !== null) deselect();
 });
 
 // ============================================================
@@ -850,7 +1011,7 @@ window.addEventListener('keydown', e => {
 function init() {
   const W = mapImg.naturalWidth, H = mapImg.naturalHeight;
   setupSVG(W, H);
-  drawPiece();
+  drawAllUnits();
 
   // 初期パン: マップ中央が画面中央に来るように
   panX = (window.innerWidth  - W * zoom) / 2;
@@ -1230,7 +1391,7 @@ document.getElementById('btn-terrain-toggle').addEventListener('click', () => {
     btn.classList.replace('btn-neutral', 'btn-terrain-on');
     legend.classList.add('visible');
     svg.style.cursor = 'crosshair';
-    if (selected) deselect();
+    if (selectedUnitId !== null) deselect();
   } else {
     btn.textContent = '地形設定 OFF';
     btn.classList.replace('btn-terrain-on', 'btn-neutral');

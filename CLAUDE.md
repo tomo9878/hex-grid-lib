@@ -475,7 +475,15 @@ Road to Brussels VP hexにフランスユニットが進入・隣接した場合
 1. ✅ **ヘックスグリッド描画**（Pointy-top、Cube座標、SVGオーバーレイ）
    - `hex-lib.js`：FlatTopLayout / PointyTopLayout、BFS・Dijkstra・LOS、SVGグリッド生成
    - `index.html`：マップ画像 + SVGオーバーレイ、パン＆ズーム、駒クリック移動プロトタイプ
-2. **ユニット配置・表示**（両面、マーカー付き）
+2. ✅ **ユニット配置・表示**（マルチユニット、type/army/small プロパティ）
+   - `index.html` に実装済み：
+     - `units` 配列：`{ id, col, row, type, army, small, imageHref }` 構造
+     - `type`: `'infantry' | 'artillery' | 'HC' | 'LC'`
+     - `army`: `'french' | 'allied' | 'prussian'`
+     - `drawAllUnits()` — SVGユニット層（`#units-layer`）に全ユニットを描画
+     - 軍色アンダーバー（仏=青、連合=赤、プロイセン=グレー）
+     - ユニットクリックで選択、選択中は金色枠
+   - 未実装：両面（Fresh/Battleworn）、Shaken/Disrupted マーカー表示
 3. ✅ **チットプルシステム**（マーカー管理、ランダム抽選）
    - `chit-pull.js`：`ChitPullSystem` クラス
      - カップ管理（15枚初期：仏×6、連合×5、Napoleon×2、Wellington、Blücher）
@@ -496,7 +504,20 @@ Road to Brussels VP hexにフランスユニットが進入・隣接した場合
      - `getMoveCost(from, to)` — 登り坂なら 2、それ以外 1
      - `isRidgeBlocking(addr)` — LOS遮断候補のridgeか判定（隣接にflatあり）
      - `neighborAddrs(addr)` — 隣接ヘックスのアドレス配列（汎用ユーティリティ）
-5. **移動ルール**（地形コスト、Enemy Threat、Slowing Terrain）
+5. ✅ **移動可能ヘックスのハイライト**（BFS、地形コスト・Enemy Threat 対応）
+   - `index.html` に実装済み：
+     - `getMA(type)` — infantry/artillery=2、HC=3、LC=4
+     - `computeReachable(unit)` — BFSで `reachableMap`（addr → mustStop）を計算
+       - 河川ヘックスサイドブロック（`riverHexsides` Set、現在空・今後追加予定）
+       - 道路経由なら難地形停止・河川を免除（`roadHexes` Set、現在空・今後追加予定）
+       - woods/buildings/walled_buildings で停止必須
+       - Enemy Threat（敵ユニット隣接ヘックス）で停止必須
+       - Prussian Zone Restriction（`prussianDeployed` フラグ、19xx/20xx制限）
+       - スタックルール：どちらかが small なら2体まで停止地点可
+       - 友軍占有ヘックスは通過のみ可（停止不可）
+     - `hex-reachable`（青） / `hex-stop`（オレンジ）の2色ハイライト
+     - ユニットクリックで選択・ハイライト表示、移動先クリックで移動、Esc で解除
+   - 未実装：Forced March、道路データ入力UI、河川データ入力UI
 6. **砲撃戦闘解決**（射程・LOS計算、ダイス判定）
 7. **近接戦闘解決**（各種ボーナス・修正の適用）
 8. **敵自動判定ロジック**（Target Priority計算が核心）
