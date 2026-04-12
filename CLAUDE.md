@@ -47,11 +47,13 @@ Vassalの `buildFile.xml` より抽出。SVGオーバーレイを合わせる際
 - マップ画像をそのまま `<img>` タグで背景として使用
 - SVGを絶対位置で重ねてヘックスグリッドを描画
 - dx/dy/x0/y0 の値を使えばヘックス中心座標を正確に計算可能
-- ヘックス中心座標の計算式（Pointy-top, offset座標）：
+- ヘックス中心座標の計算式（Pointy-top, odd-q offset座標）：
   ```
-  px = x0 + col * dx + (row % 2 == 1 ? dx/2 : 0)
-  py = y0 + row * dy
+  px = x0 + col * dx
+  py = y0 + row * dy + (col % 2 == 1 ? dy/2 : 0)
   ```
+  ※ dx=列間隔、dy=行間隔。奇数列（col % 2 == 1）が縦に dy/2 オフセット。
+  ※ 最初の公式（行と列が逆）は誤りだったので修正済み。
 
 ### マップ描画方針
 - ボード画像（`vive-lempereur map v2.png`）を背景として使用し、SVGでヘックスグリッドをオーバーレイする方式
@@ -470,9 +472,21 @@ Road to Brussels VP hexにフランスユニットが進入・隣接した場合
 
 ## 実装優先順位
 
-1. **ヘックスグリッド描画**（Pointy-top、Cube座標、SVGオーバーレイ）
+1. ✅ **ヘックスグリッド描画**（Pointy-top、Cube座標、SVGオーバーレイ）
+   - `hex-lib.js`：FlatTopLayout / PointyTopLayout、BFS・Dijkstra・LOS、SVGグリッド生成
+   - `index.html`：マップ画像 + SVGオーバーレイ、パン＆ズーム、駒クリック移動プロトタイプ
 2. **ユニット配置・表示**（両面、マーカー付き）
-3. **チットプルシステム**（マーカー管理、ランダム抽選）
+3. ✅ **チットプルシステム**（マーカー管理、ランダム抽選）
+   - `chit-pull.js`：`ChitPullSystem` クラス
+     - カップ管理（15枚初期：仏×6、連合×5、Napoleon×2、Wellington、Blücher）
+     - プロイセン3コープスはTRT待ち（ターン10/11/12に自動追加）
+     - Napoleon自動保持（最大2枚）、Humbugged（フランス1枚保持）
+     - `endTurn()` で全保持マーカーをカップに戻し次ターンへ
+   - 連合軍・プロイセン共通テーブル（11-66、6結果）
+   - Wellington Old Nosey Table / Blücher Alte Vorwarts Table
+   - Napoleon Le Petit Caporal Table（5択アクション）
+   - UIパネル（右サイド折り畳み可）：カップ残り・内訳・現在マーカー・保持中・TRTスケジュール・解決済み・ログ
+   - ダイスロールモーダル（結果＋説明自動表示）、Napoleon選択モーダル
 4. **移動ルール**（地形コスト、Enemy Threat、Slowing Terrain）
 5. **砲撃戦闘解決**（射程・LOS計算、ダイス判定）
 6. **近接戦闘解決**（各種ボーナス・修正の適用）

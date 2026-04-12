@@ -7,6 +7,162 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #eee; }
 
+/* ============================================================
+   Chit Pull Panel
+   ============================================================ */
+#chit-panel {
+  position: fixed; top: 0; right: 0; z-index: 30;
+  width: 272px; height: 100vh;
+  background: rgba(10,10,25,.92); border-left: 1px solid #333;
+  display: flex; flex-direction: column;
+  font-size: 12px; color: #ddd;
+  transition: transform .2s;
+}
+#chit-panel.collapsed { transform: translateX(248px); }
+
+#chit-toggle {
+  position: absolute; left: -24px; top: 50%;
+  transform: translateY(-50%);
+  width: 24px; height: 56px;
+  background: rgba(10,10,25,.92); border: 1px solid #333; border-right: none;
+  border-radius: 6px 0 0 6px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: #888; font-size: 14px; user-select: none;
+}
+
+/* ヘッダー */
+#chit-header {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #333;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+#chit-header .title { font-size: 13px; font-weight: bold; color: #ccc; letter-spacing: .05em; }
+#turn-badge {
+  background: #222; border: 1px solid #444; border-radius: 4px;
+  padding: 2px 8px; font-size: 12px; color: #ffd700;
+}
+
+/* スクロール可能なコンテンツ領域 */
+#chit-body {
+  flex: 1; overflow-y: auto; padding: 10px 10px 0;
+}
+#chit-body::-webkit-scrollbar { width: 4px; }
+#chit-body::-webkit-scrollbar-track { background: transparent; }
+#chit-body::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
+
+/* フッター（ボタン群） */
+#chit-footer {
+  padding: 8px 10px; border-top: 1px solid #333; flex-shrink: 0;
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+
+/* セクションラベル */
+.cp-section {
+  font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .08em;
+  margin: 10px 0 4px;
+}
+.cp-section:first-child { margin-top: 0; }
+
+/* マーカーカード */
+.marker-card {
+  border-radius: 5px; padding: 7px 9px; margin-bottom: 5px;
+  border-left: 3px solid transparent;
+  background: rgba(255,255,255,.05);
+}
+.marker-card .mc-label { font-weight: bold; font-size: 12px; }
+.marker-card .mc-sub   { font-size: 10px; color: #888; margin-top: 1px; }
+.marker-card .mc-actions { margin-top: 6px; display: flex; gap: 5px; flex-wrap: wrap; }
+
+/* カップカウント */
+#cup-count-bar {
+  background: #1a1a2e; border: 1px solid #333; border-radius: 4px;
+  padding: 5px 8px; margin-bottom: 5px;
+}
+#cup-count-bar .cc-main { font-size: 14px; font-weight: bold; color: #0f0; }
+#cup-count-bar .cc-breakdown {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;
+}
+.cc-chip {
+  font-size: 10px; padding: 1px 5px; border-radius: 3px;
+  background: rgba(255,255,255,.08); white-space: nowrap;
+}
+
+/* 解決済みリスト */
+#discarded-list .disc-item {
+  font-size: 11px; color: #666; padding: 1px 0;
+}
+#discarded-list .disc-item::before { content: '✓ '; color: #444; }
+
+/* ログ */
+#chit-log {
+  font-size: 11px; max-height: 110px; overflow-y: auto;
+  border-top: 1px solid #2a2a3a; margin: 6px -10px 0; padding: 5px 10px;
+}
+#chit-log::-webkit-scrollbar { width: 3px; }
+#chit-log::-webkit-scrollbar-thumb { background: #333; }
+.log-entry { color: #666; padding: 1px 0; line-height: 1.5; }
+.log-entry.log-new { color: #aaa; }
+
+/* TRTセクション */
+#trt-list .trt-item {
+  display: flex; justify-content: space-between;
+  font-size: 11px; padding: 2px 0; color: #888;
+}
+.trt-turn { color: #aaa; font-weight: bold; }
+
+/* モーダル（ダイスロール結果） */
+#roll-modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center;
+}
+#roll-modal.hidden { display: none; }
+#roll-modal-box {
+  background: #1a1a2e; border: 1px solid #555; border-radius: 8px;
+  padding: 20px 24px; width: 340px; max-height: 80vh; overflow-y: auto;
+}
+#roll-modal-box h3 { font-size: 14px; color: #ccc; margin-bottom: 12px; }
+#roll-dice { font-size: 28px; text-align: center; margin: 10px 0; color: #ffd700; }
+#roll-result-title { font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 6px; }
+#roll-result-desc { font-size: 12px; color: #aaa; line-height: 1.7; white-space: pre-line; }
+#roll-modal-footer { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Napoleon選択モーダル */
+#napoleon-modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center;
+}
+#napoleon-modal.hidden { display: none; }
+#napoleon-modal-box {
+  background: #1a1a2e; border: 1px solid #ffd70088; border-radius: 8px;
+  padding: 20px 24px; width: 360px; max-height: 80vh; overflow-y: auto;
+}
+#napoleon-modal-box h3 { font-size: 14px; color: #ffd700; margin-bottom: 12px; }
+.napoleon-option {
+  border: 1px solid #333; border-radius: 5px; padding: 9px 11px;
+  margin-bottom: 7px; cursor: pointer; transition: background .15s;
+}
+.napoleon-option:hover { background: rgba(255,215,0,.08); border-color: #ffd70066; }
+.napoleon-option .nopt-title { font-weight: bold; font-size: 12px; color: #ffd700; }
+.napoleon-option .nopt-desc  { font-size: 11px; color: #888; margin-top: 3px; line-height: 1.6; }
+
+/* 汎用ボタン */
+.btn {
+  padding: 4px 9px; border-radius: 4px; border: 1px solid;
+  cursor: pointer; font-size: 11px; font-family: monospace;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .8; }
+.btn:disabled { opacity: .35; cursor: default; }
+.btn-primary  { background: #1a4a2a; border-color: #0f0;   color: #0f0; }
+.btn-danger   { background: #4a1a1a; border-color: #f66;   color: #f66; }
+.btn-warn     { background: #4a3a10; border-color: #ffd700; color: #ffd700; }
+.btn-neutral  { background: #2a2a3a; border-color: #555;   color: #aaa; }
+.btn-hold     { background: #1a2a4a; border-color: #5bb5ff; color: #5bb5ff; }
+.btn-lg { padding: 6px 12px; font-size: 12px; flex: 1; }
+
 #viewport { width: 100vw; height: 100vh; overflow: hidden; position: relative; cursor: grab; }
 #viewport.panning { cursor: grabbing; }
 
@@ -87,7 +243,94 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
   Escキー: 選択解除
 </div>
 
+<!-- ============================================================
+     Chit Pull Panel
+     ============================================================ -->
+<div id="chit-panel">
+  <div id="chit-toggle" title="パネルを折り畳む">◀</div>
+
+  <!-- ヘッダー -->
+  <div id="chit-header">
+    <span class="title">チットプル</span>
+    <span id="turn-badge">ターン 1 / 12</span>
+  </div>
+
+  <!-- メインコンテンツ -->
+  <div id="chit-body">
+
+    <!-- カップ残り -->
+    <div class="cp-section">カップ</div>
+    <div id="cup-count-bar">
+      <span class="cc-main" id="cup-count">0</span>
+      <span style="color:#666;font-size:11px"> 枚残り</span>
+      <div class="cc-breakdown" id="cup-breakdown"></div>
+    </div>
+
+    <!-- 現在引かれたマーカー -->
+    <div class="cp-section">現在のマーカー</div>
+    <div id="drawn-area">
+      <div id="drawn-empty" style="color:#555;font-size:11px;padding:4px 0">— まだ引かれていません —</div>
+      <div id="drawn-card" class="marker-card" style="display:none"></div>
+    </div>
+
+    <!-- 保持中マーカー -->
+    <div class="cp-section">保持中</div>
+    <div id="held-area">
+      <div id="held-napoleon-area"></div>
+      <div id="held-french-area"></div>
+      <div id="held-empty" style="color:#555;font-size:11px;padding:2px 0">— なし —</div>
+    </div>
+
+    <!-- TRT（プロイセン到着スケジュール） -->
+    <div class="cp-section">プロイセン TRT</div>
+    <div id="trt-list"></div>
+
+    <!-- 解決済み（今ターン） -->
+    <div class="cp-section">解決済み（今ターン）</div>
+    <div id="discarded-list">
+      <div id="discarded-empty" style="color:#555;font-size:11px;padding:2px 0">— なし —</div>
+    </div>
+
+    <!-- ログ -->
+    <div class="cp-section" style="margin-top:10px">ログ</div>
+    <div id="chit-log"></div>
+
+    <div style="height:10px"></div>
+  </div><!-- /#chit-body -->
+
+  <!-- フッター -->
+  <div id="chit-footer">
+    <button id="btn-draw"    class="btn btn-primary btn-lg">🎲 マーカーを引く</button>
+    <button id="btn-endturn" class="btn btn-neutral btn-lg">ターン終了 →</button>
+  </div>
+</div>
+
+<!-- ダイスロール結果モーダル -->
+<div id="roll-modal" class="hidden">
+  <div id="roll-modal-box">
+    <h3 id="roll-modal-title">テーブルロール</h3>
+    <div id="roll-dice"></div>
+    <div id="roll-result-title"></div>
+    <div id="roll-result-desc"></div>
+    <div id="roll-modal-footer">
+      <button id="btn-roll-resolve" class="btn btn-primary">解決済みにする</button>
+    </div>
+  </div>
+</div>
+
+<!-- Napoleon選択モーダル -->
+<div id="napoleon-modal" class="hidden">
+  <div id="napoleon-modal-box">
+    <h3>Le Petit Caporal Table</h3>
+    <div id="napoleon-options-list"></div>
+    <div style="margin-top:10px;text-align:right">
+      <button id="btn-napoleon-cancel" class="btn btn-neutral">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <script src="hex-lib.js"></script>
+<script src="chit-pull.js"></script>
 <script>
 // ============================================================
 // VLE グリッド設定（Vassalモジュールより実測）
@@ -412,6 +655,360 @@ if (mapImg.complete && mapImg.naturalWidth > 0) {
 } else {
   mapImg.addEventListener('load', init);
 }
+
+// ============================================================
+// チットプルUI
+// ============================================================
+
+const cps = new ChitPullSystem();
+
+// ---- 要素参照 ----
+const elTurnBadge      = document.getElementById('turn-badge');
+const elCupCount       = document.getElementById('cup-count');
+const elCupBreakdown   = document.getElementById('cup-breakdown');
+const elDrawnEmpty     = document.getElementById('drawn-empty');
+const elDrawnCard      = document.getElementById('drawn-card');
+const elHeldNapoleon   = document.getElementById('held-napoleon-area');
+const elHeldFrench     = document.getElementById('held-french-area');
+const elHeldEmpty      = document.getElementById('held-empty');
+const elTRTList        = document.getElementById('trt-list');
+const elDiscardedList  = document.getElementById('discarded-list');
+const elDiscardedEmpty = document.getElementById('discarded-empty');
+const elChitLog        = document.getElementById('chit-log');
+const elBtnDraw        = document.getElementById('btn-draw');
+const elBtnEndTurn     = document.getElementById('btn-endturn');
+
+// ---- パネル折り畳み ----
+const elChitPanel  = document.getElementById('chit-panel');
+const elChitToggle = document.getElementById('chit-toggle');
+elChitToggle.addEventListener('click', () => {
+  const collapsed = elChitPanel.classList.toggle('collapsed');
+  elChitToggle.textContent = collapsed ? '▶' : '◀';
+});
+
+// ---- マーカータイプ → 色 ----
+const TYPE_COLOR = {
+  french:    '#5bb5ff',
+  allied:    '#ff8888',
+  prussian:  '#aaaaaa',
+  napoleon:  '#ffd700',
+  wellington:'#cc4444',
+  blucher:   '#aaaaaa',
+};
+const TYPE_LABEL_JP = {
+  french:    'フランス',
+  allied:    '連合軍',
+  prussian:  'プロイセン',
+  napoleon:  'Napoleon',
+  wellington:'Wellington',
+  blucher:   'Blücher',
+};
+
+// ---- UI更新 ----
+function renderChitUI(state) {
+  // ターンバッジ
+  elTurnBadge.textContent = `ターン ${state.turn} / 12`;
+
+  // カップ
+  elCupCount.textContent = state.cup.length;
+  const bd = {};
+  for (const m of state.cup) bd[m.type] = (bd[m.type] || 0) + 1;
+  elCupBreakdown.innerHTML = '';
+  for (const [type, count] of Object.entries(bd)) {
+    const chip = document.createElement('span');
+    chip.className = 'cc-chip';
+    chip.style.color = TYPE_COLOR[type] || '#aaa';
+    chip.textContent = `${TYPE_LABEL_JP[type] || type} ×${count}`;
+    elCupBreakdown.appendChild(chip);
+  }
+
+  // 現在のマーカー
+  if (state.drawn) {
+    elDrawnEmpty.style.display = 'none';
+    elDrawnCard.style.display = '';
+    renderDrawnCard(elDrawnCard, state.drawn);
+  } else {
+    elDrawnEmpty.style.display = '';
+    elDrawnCard.style.display = 'none';
+  }
+
+  // 保持中マーカー
+  elHeldNapoleon.innerHTML = '';
+  state.heldNapoleon.forEach((m, i) => {
+    const div = makeHeldCard(m, () => openNapoleonModal(i), '使用', 'btn-warn');
+    elHeldNapoleon.appendChild(div);
+  });
+  elHeldFrench.innerHTML = '';
+  if (state.heldFrench) {
+    const div = makeHeldCard(state.heldFrench, () => {
+      const r = cps.useHeldFrench();
+      if (!r.ok) { alert(r.error); return; }
+      // drawnとして表示させるためrenderChitUIを再実行
+      renderChitUI(cps.getState());
+    }, '使用（Humbugged）', 'btn-hold');
+    elHeldFrench.appendChild(div);
+  }
+  elHeldEmpty.style.display =
+    (state.heldNapoleon.length === 0 && !state.heldFrench) ? '' : 'none';
+
+  // TRT
+  elTRTList.innerHTML = '';
+  if (state.trtMarkers.length === 0) {
+    elTRTList.innerHTML = '<div style="color:#555;font-size:11px">— 全コープス展開済み —</div>';
+  } else {
+    for (const m of state.trtMarkers) {
+      const div = document.createElement('div');
+      div.className = 'trt-item';
+      div.innerHTML = `<span>${m.label} <span style="color:#888">(${m.sub})</span></span>`
+                    + `<span class="trt-turn">ターン${m.trtTurn}到着</span>`;
+      elTRTList.appendChild(div);
+    }
+  }
+
+  // 解決済み
+  elDiscardedList.innerHTML = '';
+  if (state.discarded.length === 0) {
+    elDiscardedEmpty.style.display = '';
+    elDiscardedList.appendChild(elDiscardedEmpty);
+  } else {
+    elDiscardedEmpty.style.display = 'none';
+    for (const m of state.discarded) {
+      const div = document.createElement('div');
+      div.className = 'disc-item';
+      div.textContent = m.sub ? `${m.label} (${m.sub})` : m.label;
+      elDiscardedList.appendChild(div);
+    }
+  }
+
+  // ログ
+  elChitLog.innerHTML = '';
+  state.log.slice(0, 20).forEach((entry, i) => {
+    const div = document.createElement('div');
+    div.className = 'log-entry' + (i < 3 ? ' log-new' : '');
+    div.textContent = entry.msg;
+    elChitLog.appendChild(div);
+  });
+
+  // ボタン状態
+  elBtnDraw.disabled = !!state.drawn || state.cup.length === 0;
+  elBtnEndTurn.disabled = !!state.drawn;
+  if (state.turn >= 12 && state.cup.length === 0 && !state.drawn) {
+    elBtnEndTurn.textContent = 'ゲーム終了';
+  } else {
+    elBtnEndTurn.textContent = 'ターン終了 →';
+  }
+}
+
+// ---- 現在引かれたマーカーのカード描画 ----
+function renderDrawnCard(el, m) {
+  const color = TYPE_COLOR[m.type] || '#aaa';
+  el.style.borderLeftColor = color;
+  el.innerHTML = '';
+
+  const label = document.createElement('div');
+  label.className = 'mc-label';
+  label.style.color = color;
+  label.textContent = m.label;
+  el.appendChild(label);
+
+  if (m.sub) {
+    const sub = document.createElement('div');
+    sub.className = 'mc-sub';
+    sub.textContent = m.sub;
+    el.appendChild(sub);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'mc-actions';
+  el.appendChild(actions);
+
+  switch (m.type) {
+    case 'french': {
+      const btnAct = makeBtn('アクティベート', 'btn-primary', () => {
+        cps.resolveDrawn();
+        renderChitUI(cps.getState());
+      });
+      actions.appendChild(btnAct);
+
+      // Humbugged: 保持可能（保持枠が空いている場合のみ）
+      if (!cps.getState().heldFrench) {
+        const btnHold = makeBtn('保持（Humbugged）', 'btn-hold', () => {
+          const r = cps.holdFrench();
+          if (!r.ok) { alert(r.error); return; }
+          renderChitUI(cps.getState());
+        });
+        actions.appendChild(btnHold);
+      }
+      break;
+    }
+
+    case 'allied':
+    case 'prussian': {
+      const btnRoll = makeBtn('ロール＆アクティベート', 'btn-danger', () => {
+        openRollModal(m, ALLIED_PRUSSIAN_TABLE, () => {
+          cps.resolveDrawn();
+          renderChitUI(cps.getState());
+        });
+      });
+      actions.appendChild(btnRoll);
+      break;
+    }
+
+    case 'wellington': {
+      const btnRoll = makeBtn('Old Nosey Table', 'btn-danger', () => {
+        openRollModal(m, WELLINGTON_TABLE, () => {
+          cps.resolveDrawn();
+          renderChitUI(cps.getState());
+        }, wellingtonPreamble());
+      });
+      actions.appendChild(btnRoll);
+      break;
+    }
+
+    case 'blucher': {
+      const btnRoll = makeBtn('Alte Vorwarts Table', 'btn-neutral', () => {
+        openRollModal(m, BLUCHER_TABLE, () => {
+          cps.resolveDrawn();
+          renderChitUI(cps.getState());
+        }, blucherPreamble());
+      });
+      actions.appendChild(btnRoll);
+      break;
+    }
+
+    case 'napoleon':
+      // Napoleon は引いた瞬間に自動保持されるのでここには来ない
+      break;
+  }
+}
+
+function wellingtonPreamble() {
+  return '① 最多HitのAnglo-Allied（Detachment除く）ユニットをRally（同数ならER最高、さらに同数ならプレイヤー選択）\n② 以下のテーブルをロール：';
+}
+
+function blucherPreamble() {
+  const trt = cps.getState().trtMarkers;
+  let txt = '① TRT上の全Prussian Activation Markerを1マス前進\n';
+  txt += '② 最多HitのPrussianユニットをRally\n';
+  txt += '③ 以下のテーブルをロール：';
+  if (trt.length > 0) {
+    const names = trt.map(m => m.label).join('、');
+    txt = `① TRT上の ${names} を1マス前進（ターン${trt[0]?.trtTurn}→${trt[0]?.trtTurn - 1 > 0 ? trt[0].trtTurn - 1 : '即時'}）\n② 最多HitのPrussianユニットをRally\n③ 以下のテーブルをロール：`;
+    // 実際にTRTを1マス前進
+    for (const m of trt) {
+      m.trtTurn = Math.max(cps.turn + 1, m.trtTurn - 1);
+    }
+  }
+  return txt;
+}
+
+// ---- 保持中マーカーカード ----
+function makeHeldCard(m, onUse, btnLabel, btnClass) {
+  const color = TYPE_COLOR[m.type] || '#aaa';
+  const div = document.createElement('div');
+  div.className = 'marker-card';
+  div.style.borderLeftColor = color;
+  div.innerHTML = `<div class="mc-label" style="color:${color}">${m.label}</div>`
+                + (m.sub ? `<div class="mc-sub">${m.sub}</div>` : '');
+  const actions = document.createElement('div');
+  actions.className = 'mc-actions';
+  actions.appendChild(makeBtn(btnLabel, btnClass, onUse));
+  div.appendChild(actions);
+  return div;
+}
+
+// ---- ボタン生成ヘルパー ----
+function makeBtn(text, cls, onClick) {
+  const btn = document.createElement('button');
+  btn.className = `btn ${cls}`;
+  btn.textContent = text;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+// ---- ダイスロールモーダル ----
+let _rollResolve = null;
+
+function openRollModal(marker, table, onResolve, preamble = '') {
+  const { total, d1, d2 } = roll2d6();
+  const result = lookupTable(table, total);
+
+  document.getElementById('roll-modal-title').textContent =
+    `${marker.label}${marker.sub ? ' — ' + marker.sub : ''} アクティベーション`;
+  document.getElementById('roll-dice').textContent = `⚄ ${d1} + ⚄ ${d2} = ${total}`;
+
+  if (result) {
+    document.getElementById('roll-result-title').textContent = result.title;
+    document.getElementById('roll-result-desc').textContent =
+      (preamble ? preamble + '\n\n' : '') + result.desc;
+  } else {
+    document.getElementById('roll-result-title').textContent = '（結果なし）';
+    document.getElementById('roll-result-desc').textContent = `ロール: ${total}`;
+  }
+
+  _rollResolve = onResolve;
+  document.getElementById('roll-modal').classList.remove('hidden');
+}
+
+document.getElementById('btn-roll-resolve').addEventListener('click', () => {
+  document.getElementById('roll-modal').classList.add('hidden');
+  if (_rollResolve) { _rollResolve(); _rollResolve = null; }
+});
+
+// ---- Napoleon選択モーダル ----
+let _napoleonIdx = -1;
+
+function openNapoleonModal(idx) {
+  _napoleonIdx = idx;
+  const list = document.getElementById('napoleon-options-list');
+  list.innerHTML = '';
+  for (const opt of NAPOLEON_OPTIONS) {
+    const div = document.createElement('div');
+    div.className = 'napoleon-option';
+    div.innerHTML = `<div class="nopt-title">${opt.title}</div>`
+                  + `<div class="nopt-desc">${opt.desc}</div>`;
+    div.addEventListener('click', () => {
+      const r = cps.useNapoleon(_napoleonIdx, opt.key);
+      if (!r.ok) { alert(r.error); return; }
+      document.getElementById('napoleon-modal').classList.add('hidden');
+      renderChitUI(cps.getState());
+    });
+    list.appendChild(div);
+  }
+  document.getElementById('napoleon-modal').classList.remove('hidden');
+}
+
+document.getElementById('btn-napoleon-cancel').addEventListener('click', () => {
+  document.getElementById('napoleon-modal').classList.add('hidden');
+});
+
+// ---- メインボタン ----
+elBtnDraw.addEventListener('click', () => {
+  const r = cps.drawMarker();
+  if (r.error) {
+    alert(r.error);
+    return;
+  }
+  renderChitUI(cps.getState());
+});
+
+elBtnEndTurn.addEventListener('click', () => {
+  if (cps.getState().drawn) {
+    alert('現在のマーカーを先に解決してください');
+    return;
+  }
+  const r = cps.endTurn();
+  renderChitUI(cps.getState());
+  if (r.gameOver) {
+    setTimeout(() => alert('ゲーム終了！VP計算を行ってください。'), 100);
+  }
+});
+
+// ---- 変更リスナー登録 ----
+cps.on(renderChitUI);
+
+// ---- 初期描画 ----
+renderChitUI(cps.getState());
 </script>
 </body>
 </html>
