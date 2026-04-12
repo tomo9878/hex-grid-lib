@@ -487,13 +487,22 @@ Road to Brussels VP hexにフランスユニットが進入・隣接した場合
    - Napoleon Le Petit Caporal Table（5択アクション）
    - UIパネル（右サイド折り畳み可）：カップ残り・内訳・現在マーカー・保持中・TRTスケジュール・解決済み・ログ
    - ダイスロールモーダル（結果＋説明自動表示）、Napoleon選択モーダル
-4. **移動ルール**（地形コスト、Enemy Threat、Slowing Terrain）
-5. **砲撃戦闘解決**（射程・LOS計算、ダイス判定）
-6. **近接戦闘解決**（各種ボーナス・修正の適用）
-7. **敵自動判定ロジック**（Target Priority計算が核心）
-8. **Wellington/Blücher/Napoleon処理**
-9. **ステップロス・Panic Test・Rally**
-10. **VP計算・勝利判定**
+4. ✅ **地形データ・地形関数**（ridge/flat/woods/buildings/walled_buildings）
+   - `vle-terrain.json`：全マップ地形データ（ridge 80ヘックス確定済み）
+   - `index.html` に実装済み：
+     - 地形設定モード（トグルボタン、クリックでサイクル）、地形塗りSVGレイヤー
+     - `exportTerrainJSON()` / `importTerrainJSON()` — JSON保存・読込
+     - `isUphill(from, to)` — flat→ridge の移動が登り坂か判定
+     - `getMoveCost(from, to)` — 登り坂なら 2、それ以外 1
+     - `isRidgeBlocking(addr)` — LOS遮断候補のridgeか判定（隣接にflatあり）
+     - `neighborAddrs(addr)` — 隣接ヘックスのアドレス配列（汎用ユーティリティ）
+5. **移動ルール**（地形コスト、Enemy Threat、Slowing Terrain）
+6. **砲撃戦闘解決**（射程・LOS計算、ダイス判定）
+7. **近接戦闘解決**（各種ボーナス・修正の適用）
+8. **敵自動判定ロジック**（Target Priority計算が核心）
+9. **Wellington/Blücher/Napoleon処理**
+10. **ステップロス・Panic Test・Rally**
+11. **VP計算・勝利判定**
 
 ---
 

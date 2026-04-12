@@ -204,6 +204,24 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
 .hex-adjacent { fill: rgba(0,180,255,0.25);    stroke: #00bbff; stroke-width: 2;   opacity: 1; }
 
 .hex-label { fill: #00cc66; font-size: 10px; opacity: 0.45; pointer-events: none; user-select: none; }
+
+/* ---- Terrain Toolbar ---- */
+#terrain-toolbar {
+  position: fixed; top: 172px; left: 12px; z-index: 20;
+  background: rgba(0,0,0,.75); border: 1px solid #444;
+  border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #aaa;
+  min-width: 160px;
+}
+#terrain-toolbar .tt-title {
+  font-size: 10px; color: #666; text-transform: uppercase;
+  letter-spacing: .08em; margin-bottom: 8px;
+}
+#terrain-toolbar .tt-buttons { display: flex; flex-direction: column; gap: 5px; }
+.btn-terrain-on { background: #2a1a00; border-color: #f90; color: #f90; }
+#terrain-legend { display: none; margin-top: 8px; font-size: 11px; }
+#terrain-legend.visible { display: block; }
+.tl-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.tl-swatch { width: 16px; height: 10px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(255,255,255,.15); }
 </style>
 </head>
 <body>
@@ -241,6 +259,26 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
   左クリック（駒）: 選択<br>
   左クリック（青いヘックス）: 移動<br>
   Escキー: 選択解除
+</div>
+
+<!-- Terrain Edit Toolbar -->
+<div id="terrain-toolbar">
+  <div class="tt-title">地形設定</div>
+  <div class="tt-buttons">
+    <button id="btn-terrain-toggle" class="btn btn-neutral">地形設定 OFF</button>
+    <button id="btn-terrain-export" class="btn btn-neutral">JSON 保存</button>
+    <label class="btn btn-neutral" style="cursor:pointer;text-align:center;display:block">
+      JSON 読込
+      <input type="file" id="terrain-import-input" accept=".json" style="display:none">
+    </label>
+  </div>
+  <div id="terrain-legend">
+    <div class="tl-item"><div class="tl-swatch" style="background:rgba(200,160,80,.55)"></div>Ridge</div>
+    <div class="tl-item"><div class="tl-swatch" style="background:rgba(30,110,30,.55)"></div>Woods</div>
+    <div class="tl-item"><div class="tl-swatch" style="background:rgba(160,140,110,.55)"></div>Buildings</div>
+    <div class="tl-item"><div class="tl-swatch" style="background:rgba(100,80,70,.65)"></div>Walled Bldgs</div>
+    <div class="tl-item"><div class="tl-swatch" style="background:none"></div>Flat（消去）</div>
+  </div>
 </div>
 
 <!-- ============================================================
@@ -373,6 +411,156 @@ function inBounds(colLabel, rowLabel) {
 }
 
 // ============================================================
+// 地形データ
+// ============================================================
+const TERRAIN_TYPES  = ['flat', 'ridge', 'woods', 'buildings', 'walled_buildings'];
+const TERRAIN_COLORS = {
+  flat:             null,
+  ridge:            'rgba(200,160,80,0.45)',
+  woods:            'rgba(30,110,30,0.45)',
+  buildings:        'rgba(160,140,110,0.45)',
+  walled_buildings: 'rgba(100,80,70,0.55)',
+};
+const TERRAIN_JP = {
+  flat:             'Flat',
+  ridge:            'Ridge',
+  woods:            'Woods',
+  buildings:        'Buildings',
+  walled_buildings: 'Walled Buildings',
+};
+
+const terrainData    = new Map();   // addr → terrain type（'flat'は省略）
+const terrainFillEls = new Map();   // addr → SVGPolygonElement（地形塗りレイヤー）
+let terrainEditMode  = false;
+
+function getTerrain(addr) {
+  return terrainData.get(addr) || 'flat';
+}
+
+function setTerrain(addr, type) {
+  if (type === 'flat') {
+    terrainData.delete(addr);
+  } else {
+    terrainData.set(addr, type);
+  }
+  const fillEl = terrainFillEls.get(addr);
+  if (fillEl) fillEl.setAttribute('fill', TERRAIN_COLORS[type] || 'none');
+}
+
+function cycleTerrain(addr) {
+  const current = getTerrain(addr);
+  const idx = TERRAIN_TYPES.indexOf(current);
+  const next = TERRAIN_TYPES[(idx + 1) % TERRAIN_TYPES.length];
+  setTerrain(addr, next);
+  return next;
+}
+
+function setupTerrainLayer() {
+  const g = makeSVGEl('g', { id: 'terrain-fills' });
+  svg.appendChild(g);   // createHexGrid が後でグリッドをappendするので地形は下になる
+  for (let cl = 1; cl <= GRID_COLS; cl++) {
+    for (let rl = 1; rl <= GRID_ROWS; rl++) {
+      const addr = hexAddr(cl, rl);
+      const poly = makeSVGEl('polygon', {
+        points: layout.cornersToSVG(cl - 1, rl - 1),
+        fill: 'none', stroke: 'none',
+        'pointer-events': 'none',
+      });
+      g.appendChild(poly);
+      terrainFillEls.set(addr, poly);
+    }
+  }
+}
+
+function exportTerrainJSON() {
+  const obj = {};
+  for (const [addr, type] of terrainData) obj[addr] = type;
+  const json = JSON.stringify({ version: 1, terrain: obj }, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'vle-terrain.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importTerrainJSON(text) {
+  try {
+    const data = JSON.parse(text);
+    const terrain = data.terrain || data;
+    // クリア
+    for (const addr of terrainFillEls.keys()) setTerrain(addr, 'flat');
+    // 適用
+    for (const [addr, type] of Object.entries(terrain)) {
+      if (TERRAIN_TYPES.includes(type) && terrainFillEls.has(addr)) {
+        setTerrain(addr, type);
+      }
+    }
+    return true;
+  } catch (err) {
+    alert('JSON読み込みエラー: ' + err.message);
+    return false;
+  }
+}
+
+// ============================================================
+// 移動コスト・LOS用 地形関数
+// ============================================================
+
+/**
+ * アドレス文字列から隣接ヘックスのアドレス配列を返す
+ * （範囲内のみ）
+ * @param {string} addr  e.g. "0409"
+ * @returns {string[]}
+ */
+function neighborAddrs(addr) {
+  const colLabel = parseInt(addr.slice(0, 2), 10);
+  const rowLabel = parseInt(addr.slice(2),    10);
+  const cube = labelToCube(colLabel, rowLabel);
+  const result = [];
+  for (const n of layout.neighbors(cube)) {
+    const { col, row } = cubeToLabel(n);
+    if (inBounds(col, row)) result.push(hexAddr(col, row));
+  }
+  return result;
+}
+
+/**
+ * fromAddr → toAddr の移動が「登り坂」か
+ * flat から ridge への移動のみ uphill とみなす
+ * @param {string} fromAddr  e.g. "0409"
+ * @param {string} toAddr
+ * @returns {boolean}
+ */
+function isUphill(fromAddr, toAddr) {
+  return getTerrain(fromAddr) === 'flat' && getTerrain(toAddr) === 'ridge';
+}
+
+/**
+ * fromAddr → toAddr の移動コスト（高低差のみ）
+ *   flat → ridge : 2ヘックス消費
+ *   それ以外     : 1ヘックス消費
+ * woods/buildings 等の地形ペナルティは移動ルール処理で別途加算すること
+ * @param {string} fromAddr
+ * @param {string} toAddr
+ * @returns {number}
+ */
+function getMoveCost(fromAddr, toAddr) {
+  return isUphill(fromAddr, toAddr) ? 2 : 1;
+}
+
+/**
+ * あるヘックスがLOS遮断候補のridgeか
+ * 「隣接ヘックスにflatを1つ以上持つridgeヘックス」が
+ * flat側からのLOSを遮断する可能性を持つ（edge of ridge）
+ * @param {string} addr
+ * @returns {boolean}
+ */
+function isRidgeBlocking(addr) {
+  if (getTerrain(addr) !== 'ridge') return false;
+  return neighborAddrs(addr).some(n => getTerrain(n) === 'flat');
+}
+
+// ============================================================
 // ゲーム状態
 // ============================================================
 let piece = { col: 10, row: 8 };   // 駒位置（1-indexed label）
@@ -393,6 +581,9 @@ function setupSVG(W, H) {
   svg.setAttribute('width',   W);
   svg.setAttribute('height',  H);
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  // 地形塗りレイヤー（グリッド線の下）
+  setupTerrainLayer();
 
   // ヘックスグリッド描画はライブラリに委譲
   hexEls = createHexGrid(svg, layout, {
@@ -439,6 +630,15 @@ let lastHoverAddr = null;
 function onMouseMove(e) {
   const h = getHexAt(e.clientX, e.clientY);
   const addr = h?.addr ?? null;
+
+  // 地形設定モード中はアドレス＋地形種別を表示
+  if (terrainEditMode) {
+    document.getElementById('hud-hover').textContent =
+      addr ? `${addr} [${TERRAIN_JP[getTerrain(addr)]}]` : '—';
+    lastHoverAddr = addr;
+    return;
+  }
+
   document.getElementById('hud-hover').textContent = addr ?? '—';
 
   if (addr !== lastHoverAddr) {
@@ -462,6 +662,14 @@ function onMouseClick(e) {
   if (e.button !== 0) return;
   const h = getHexAt(e.clientX, e.clientY);
   if (!h) return;
+
+  // 地形設定モード中はクリックで地形をサイクル
+  if (terrainEditMode) {
+    const next = cycleTerrain(h.addr);
+    document.getElementById('hud-hover').textContent =
+      `${h.addr} [${TERRAIN_JP[next]}]`;
+    return;
+  }
 
   const pieceAddr = hexAddr(piece.col, piece.row);
 
@@ -1009,6 +1217,39 @@ cps.on(renderChitUI);
 
 // ---- 初期描画 ----
 renderChitUI(cps.getState());
+
+// ============================================================
+// 地形ツールバー
+// ============================================================
+document.getElementById('btn-terrain-toggle').addEventListener('click', () => {
+  terrainEditMode = !terrainEditMode;
+  const btn    = document.getElementById('btn-terrain-toggle');
+  const legend = document.getElementById('terrain-legend');
+  if (terrainEditMode) {
+    btn.textContent = '地形設定 ON';
+    btn.classList.replace('btn-neutral', 'btn-terrain-on');
+    legend.classList.add('visible');
+    svg.style.cursor = 'crosshair';
+    if (selected) deselect();
+  } else {
+    btn.textContent = '地形設定 OFF';
+    btn.classList.replace('btn-terrain-on', 'btn-neutral');
+    legend.classList.remove('visible');
+    svg.style.cursor = '';
+    document.getElementById('hud-hover').textContent = '—';
+  }
+});
+
+document.getElementById('btn-terrain-export').addEventListener('click', exportTerrainJSON);
+
+document.getElementById('terrain-import-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => importTerrainJSON(ev.target.result);
+  reader.readAsText(file);
+  e.target.value = '';   // 同一ファイルの再読込を可能にする
+});
 </script>
 </body>
 </html>
