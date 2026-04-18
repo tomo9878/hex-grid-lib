@@ -168,15 +168,15 @@ function calcLOS(fromAddr, toAddr) {
   const tM = { q:toHex.q-EPS,   r:toHex.r-EPS,   s:toHex.s+2*EPS };
   const step = 1.0 / N;
   function lerp(a,b,t) { return hexRound(a.q*(1-t)+b.q*t, a.r*(1-t)+b.r*t, a.s*(1-t)+b.s*t); }
-  function toAddr(hex) { const {col,row} = cubeToLabel(hex); return inBounds(col,row) ? hexAddr(col,row) : null; }
+  function hexToStr(hex) { const {col,row} = cubeToLabel(hex); return inBounds(col,row) ? hexAddr(col,row) : null; }
   for (let i = 1; i < N; i++) {
     const t = step * i;
     const hP = lerp(fP,tP,t), hM = lerp(fM,tM,t);
     if (hP.equals(hM)) {
-      const a = toAddr(hP);
+      const a = hexToStr(hP);
       if (a && isLOSBlocker(a, fromIsRidge, toIsRidge)) return false;
     } else {
-      const aP = toAddr(hP), aM = toAddr(hM);
+      const aP = hexToStr(hP), aM = hexToStr(hM);
       if (aP && isLOSBlocker(aP, fromIsRidge, toIsRidge)) return false;
       if (aM && isLOSBlocker(aM, fromIsRidge, toIsRidge)) return false;
     }
@@ -892,12 +892,14 @@ test('⑤ Enfilade ×2（防御側の隣に友軍2体）→ SP+2 = 6（上限）
 });
 
 test('⑥ Heavy Cavalry → SP=4 + HC+2 = 6ダイス', () => {
+  units = [];
   const atk = mkUnit({sp:4,af:0,type:'HC',army:'french'});
   const def = mkUnit({sp:4,af:1,type:'infantry',army:'allied'});
   expect(calcMeleeAttackerDice(atk,def,'1008','1108'),'dice').toBe(6);
 });
 
 test('⑦ LC → HC+2 ボーナスなし（SP=2 → 2ダイス）', () => {
+  units = [];
   const atk = mkUnit({sp:2,af:0,type:'LC',army:'french'});
   const def = mkUnit({sp:4,af:1,type:'infantry',army:'allied'});
   expect(calcMeleeAttackerDice(atk,def,'1008','1108'),'dice').toBe(2);
