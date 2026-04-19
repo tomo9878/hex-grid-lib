@@ -471,6 +471,12 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
     <div class="cp-section">プロイセン TRT</div>
     <div id="trt-list"></div>
 
+    <!-- オフマップ待機ユニット -->
+    <div class="cp-section">プロイセン オフマップ</div>
+    <div id="off-map-panel">
+      <div style="color:#555;font-size:11px">— 全ユニット展開済み —</div>
+    </div>
+
     <!-- 解決済み（今ターン） -->
     <div class="cp-section">解決済み（今ターン）</div>
     <div id="discarded-list">
@@ -968,6 +974,25 @@ const units = [
   { id: 'guyot_IG_FR',      col:  5, row: 12, type: 'HC',        army: 'french', small: false, imageHref: 'images/guyot_IG_FR_front.png',      sp: 4, af: 0, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false },
   { id: 'lefeb_IG_FR',      col: 15, row: 12, type: 'HC',        army: 'french', small: false, imageHref: 'images/lefeb_IG_FR_front.png',      sp: 4, af: 0, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false },
   { id: 'ha_IG_FR',         col: 13, row: 13, type: 'artillery', army: 'french', small: false, imageHref: 'images/ha_IG_FR_front.png',         sp: 0, af: 4, er: 4, hits: 0, battleworn: false, isHeavyArtillery: true  },
+
+  // ============================================================
+  // プロイセン軍（offMap: true で開始。deployPrussianCorps で配置）
+  // ============================================================
+  // IV Corps (Bülow) — entry 2011, TRT T10
+  { id: 'bulow_cav_PR',  col: 20, row: 11, type: 'HC',        army: 'prussian', small: false, imageHref: 'images/bulow_cav_PR_front.png',  sp: 4, af: 0, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-IV', offMap: true },
+  { id: 'bulow_inf1_PR', col: 20, row: 11, type: 'infantry',  army: 'prussian', small: false, imageHref: 'images/bulow_inf1_PR_front.png', sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-IV', offMap: true },
+  { id: 'bulow_inf2_PR', col: 20, row: 11, type: 'infantry',  army: 'prussian', small: false, imageHref: 'images/bulow_inf2_PR_front.png', sp: 3, af: 1, er: 3, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-IV', offMap: true },
+  { id: 'bulow_art_PR',  col: 20, row: 11, type: 'artillery', army: 'prussian', small: false, imageHref: 'images/bulow_art_PR_front.png',  sp: 0, af: 2, er: 3, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-IV', offMap: true },
+  // II Corps (Pirch I) — entry 2009, TRT T11
+  { id: 'pirch_cav_PR',  col: 20, row:  9, type: 'HC',        army: 'prussian', small: false, imageHref: 'images/pirch_cav_PR_front.png',  sp: 4, af: 0, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-II', offMap: true },
+  { id: 'pirch_inf1_PR', col: 20, row:  9, type: 'infantry',  army: 'prussian', small: false, imageHref: 'images/pirch_inf1_PR_front.png', sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-II', offMap: true },
+  { id: 'pirch_inf2_PR', col: 20, row:  9, type: 'infantry',  army: 'prussian', small: false, imageHref: 'images/pirch_inf2_PR_front.png', sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-II', offMap: true },
+  { id: 'pirch_art_PR',  col: 20, row:  9, type: 'artillery', army: 'prussian', small: false, imageHref: 'images/pirch_art_PR_front.png',  sp: 0, af: 2, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-II', offMap: true },
+  // I Corps (Ziethen) — entry 2003, TRT T12
+  { id: 'ziethen_cav_PR',  col: 20, row:  3, type: 'LC',        army: 'prussian', small: false, imageHref: 'images/ziethen_cav_PR_front.png',  sp: 2, af: 0, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-I', offMap: true },
+  { id: 'ziethen_inf1_PR', col: 20, row:  3, type: 'infantry',  army: 'prussian', small: false, imageHref: 'images/ziethen_inf1_PR_front.png', sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-I', offMap: true },
+  { id: 'ziethen_inf2_PR', col: 20, row:  3, type: 'infantry',  army: 'prussian', small: false, imageHref: 'images/ziethen_inf2_PR_front.png', sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-I', offMap: true },
+  { id: 'ziethen_art_PR',  col: 20, row:  3, type: 'artillery', army: 'prussian', small: false, imageHref: 'images/ziethen_art_PR_front.png',  sp: 0, af: 2, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false, corps: 'pr-I', offMap: true },
 ];
 
 // British unit IDs（Thin Red Line / Scum of the Earth 対象）
@@ -1346,7 +1371,7 @@ function getNearestHexside(mapX, mapY) {
 
 /** addr にいる全ユニットを返す */
 function getUnitsAt(addr) {
-  return units.filter(u => hexAddr(u.col, u.row) === addr);
+  return units.filter(u => !u.offMap && hexAddr(u.col, u.row) === addr);
 }
 
 /** addr の隣接ヘックスに敵ユニットがいるか */
@@ -1467,6 +1492,7 @@ function drawAllUnits() {
   unitsLayerEl.innerHTML = '';
 
   for (const unit of units) {
+    if (unit.offMap) continue;
     const col = toIdx(unit.col), row = toIdx(unit.row);
     const { x, y } = layout.hexToPixel(col, row);
     const isSelected = unit.id === selectedUnitId;
@@ -2643,7 +2669,7 @@ function getCorpsUnits(marker) {
     if (marker.id === 'aa-det') return units.filter(u => u.isDetachment);
   }
   if (marker.type === 'prussian') {
-    return units.filter(u => u.army === 'prussian');
+    return units.filter(u => u.army === 'prussian' && u.corps === marker.id && !u.offMap);
   }
   return [];
 }
@@ -3194,7 +3220,12 @@ function reinforceAlliedCavalry(unit, onDone) {
 }
 
 // ---- Reinforce: Prussian units ----
-// Prussian目標: IV Corps(Bülow)/II Corps(Pirch I) → Plancenoit(1512), I Corps(Ziethen) → Papelotte(1607)
+// Prussian設定: entry hex / 目標 / ラベル
+const PRUSSIAN_CORPS_CONFIG = {
+  'pr-IV': { entryAddr: '2011', targetAddr: '1512', label: 'Bülow IV Corps' },
+  'pr-II': { entryAddr: '2009', targetAddr: '1512', label: 'Pirch I II Corps' },
+  'pr-I':  { entryAddr: '2003', targetAddr: '1607', label: 'Ziethen I Corps' },
+};
 const PRUSSIAN_REINFORCE_TARGET = {
   'pr-IV': '1512',
   'pr-II': '1512',
@@ -3879,10 +3910,167 @@ function executeBlucherResult(key, onDone) {
 }
 
 /** プロイセンコープスを展開（ユニット未実装のためログのみ） */
+// ============================================================
+// プロイセン到着システム
+// ============================================================
+
+/** オフマップ待機中のプロイセンユニット（corps IDで絞り込み） */
+function getOffMapUnits(corpId) {
+  return units.filter(u => u.army === 'prussian' && u.corps === corpId && u.offMap);
+}
+
+/** 展開順: 騎兵 → 歩兵 → 砲兵 */
+function deploymentOrder(unit) {
+  if (unit.type === 'HC' || unit.type === 'LC') return 0;
+  if (unit.type === 'infantry') return 1;
+  return 2;
+}
+
+/**
+ * entry hex が満杯 or フランス占拠の場合に
+ * col=20 上の最近空きヘックスを返す（北側優先）
+ */
+function delayedEntryHex(corpId) {
+  const { entryAddr } = PRUSSIAN_CORPS_CONFIG[corpId];
+  const entryCol = parseInt(entryAddr.slice(0, 2), 10);
+  const entryRow = parseInt(entryAddr.slice(2), 10);
+  for (let d = 1; d < 15; d++) {
+    for (const sign of [-1, 1]) {
+      const r = entryRow + sign * d;
+      if (r < 1 || r > 14) continue;
+      const addr = hexAddr(entryCol, r);
+      if (getUnitsAt(addr).length === 0) return addr;
+    }
+  }
+  return null;
+}
+
+/** ユニットをマップ上の addr に出現させる */
+function placePrussianUnit(unit, addr) {
+  unit.offMap = false;
+  unit.col    = parseInt(addr.slice(0, 2), 10);
+  unit.row    = parseInt(addr.slice(2),    10);
+  prussianDeployed = true;
+}
+
+/**
+ * プロイセンコープスの初回展開。
+ * - offMap ユニットを entry hex に配置し MA 分目標へ移動
+ * - entry hex が満杯なら col=20 上の代替 hex へ
+ */
 function deployPrussianCorps(marker) {
   prussianDeployed = true;
-  addCombatLog(`[展開] ${marker.label}（${marker.sub}）がマップ上に到着！（ユニット配置は手動）`);
-  setHudState(`[展開] ${marker.label} 到着`);
+  const cfg = PRUSSIAN_CORPS_CONFIG[marker.id];
+  if (!cfg) {
+    addCombatLog(`[展開] ${marker.label} 設定なし`);
+    return;
+  }
+  addCombatLog(`📯 ${cfg.label} arrives at ${cfg.entryAddr}!`);
+  setHudState(`[展開] ${cfg.label} 到着`);
+
+  const offMap = getOffMapUnits(marker.id)
+    .sort((a, b) => deploymentOrder(a) - deploymentOrder(b));
+  if (offMap.length === 0) { drawAllUnits(); renderOffMapPanel(); return; }
+
+  const actions = offMap.map(u => done => {
+    let landAddr = cfg.entryAddr;
+    if (!canLandAt(landAddr, u)) {
+      const alt = delayedEntryHex(marker.id);
+      if (alt) {
+        landAddr = alt;
+        addCombatLog(`[展開] ${u.id}: entry hex 満杯 → delayed entry ${alt}`);
+      } else {
+        addCombatLog(`[展開] ${u.id}: マップエッジ満杯 → オフマップ待機`);
+        done(); return;
+      }
+    }
+    const fromAddr = landAddr;
+    placePrussianUnit(u, landAddr);
+    const moved = moveTowardTarget(u, cfg.targetAddr);
+    const toAddr = hexAddr(u.col, u.row);
+    addCombatLog(`[展開] ${u.id}: ${fromAddr} → ${moved ? toAddr : fromAddr}`);
+    if (moved) setAIHighlights(fromAddr, moved);
+    drawAllUnits();
+    renderOffMapPanel();
+    setTimeout(() => { clearAIHighlights(); done(); }, 300);
+  });
+
+  executeActionsSequentially(actions, () => {
+    drawAllUnits();
+    renderOffMapPanel();
+    renderChitUI(cps.getState());
+  });
+}
+
+/**
+ * コープス Activation 時：残オフマップユニットをマップへ投入。
+ * - entry hex にフランスがいれば Delayed Entry hex を試みる
+ */
+function handleOffMapEntry(marker, onDone) {
+  const cfg = PRUSSIAN_CORPS_CONFIG[marker.id];
+  if (!cfg) { onDone(); return; }
+
+  const offMap = getOffMapUnits(marker.id)
+    .sort((a, b) => deploymentOrder(a) - deploymentOrder(b));
+  if (offMap.length === 0) { onDone(); return; }
+
+  addCombatLog(`[展開] ${cfg.label} オフマップ投入（${offMap.length}ユニット）`);
+  const actions = offMap.map(u => done => {
+    const hasFrench = getUnitsAt(cfg.entryAddr).some(v => v.army === 'french');
+    let landAddr = cfg.entryAddr;
+    if (hasFrench || !canLandAt(cfg.entryAddr, u)) {
+      const alt = delayedEntryHex(marker.id);
+      if (alt) {
+        landAddr = alt;
+        addCombatLog(`[展開] ${u.id}: Delayed Entry → ${alt}`);
+      } else {
+        addCombatLog(`[展開] ${u.id}: Delayed Entry → 待機`);
+        done(); return;
+      }
+    }
+    const fromAddr = landAddr;
+    placePrussianUnit(u, landAddr);
+    const moved = moveTowardTarget(u, cfg.targetAddr);
+    addCombatLog(`[展開] ${u.id}: ${fromAddr} → ${moved ? hexAddr(u.col, u.row) : fromAddr}`);
+    drawAllUnits();
+    renderOffMapPanel();
+    done();
+  });
+
+  executeActionsSequentially(actions, onDone);
+}
+
+/** オフマップパネルを更新 */
+function renderOffMapPanel() {
+  const el = document.getElementById('off-map-panel');
+  if (!el) return;
+  const waiting = units.filter(u => u.offMap && u.army === 'prussian');
+  if (waiting.length === 0) {
+    el.innerHTML = '<div style="color:#555;font-size:11px">— 全ユニット展開済み —</div>';
+    return;
+  }
+  el.innerHTML = '';
+  const byCorps = {};
+  for (const u of waiting) {
+    if (!byCorps[u.corps]) byCorps[u.corps] = [];
+    byCorps[u.corps].push(u);
+  }
+  for (const [corpId, list] of Object.entries(byCorps)) {
+    const cfg = PRUSSIAN_CORPS_CONFIG[corpId];
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:4px';
+    const title = document.createElement('div');
+    title.style.cssText = 'color:#aaa;font-size:11px;font-weight:bold';
+    title.textContent = cfg ? cfg.label : corpId;
+    wrap.appendChild(title);
+    for (const u of list) {
+      const row = document.createElement('div');
+      row.style.cssText = 'color:#bbb;font-size:10px;padding-left:8px';
+      row.textContent = `${u.id}  ${u.type}  SP:${u.sp} AF:${u.af} ER:${u.er}`;
+      wrap.appendChild(row);
+    }
+    el.appendChild(wrap);
+  }
 }
 
 /** Allied Conditions パネルを更新 */
@@ -3956,9 +4144,21 @@ function clearFrenchControl(addr) {
  * @param {function} onDone - 全処理完了後のコールバック
  */
 function runAlliedPrussianAI(marker, tableKey, onDone) {
-  const corpUnits = getCorpsUnits(marker);
   setHudState(`[AI] ${marker.label}（${marker.sub}）アクティベーション中...`);
 
+  // Prussian: オフマップユニットを先にマップへ投入してからAI実行
+  const doAI = () => {
+    const corpUnits = getCorpsUnits(marker);
+    _runAlliedPrussianAICore(corpUnits, marker, tableKey, onDone);
+  };
+  if (marker.type === 'prussian') {
+    handleOffMapEntry(marker, doAI);
+  } else {
+    doAI();
+  }
+}
+
+function _runAlliedPrussianAICore(corpUnits, marker, tableKey, onDone) {
   switch (tableKey) {
     case 'fire-nearest':
       resolveOpenFireNearest(corpUnits, onDone);
@@ -4429,6 +4629,10 @@ elBtnEndTurn.addEventListener('click', () => {
   drawAllUnits();
   const r = cps.endTurn();
   renderChitUI(cps.getState());
+  // TRTで到着したプロイセンコープスを展開
+  if (r.arrivedCorps && r.arrivedCorps.length > 0) {
+    r.arrivedCorps.forEach(m => deployPrussianCorps(m));
+  }
   if (r.gameOver) {
     setTimeout(() => alert('ゲーム終了！VP計算を行ってください。'), 100);
   }
@@ -4441,6 +4645,7 @@ cps.on(renderChitUI);
 renderChitUI(cps.getState());
 renderConditionsPanel();
 renderNapoleonConditions();
+renderOffMapPanel();
 
 // ============================================================
 // 地形編集 — チェックボックスUI

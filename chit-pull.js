@@ -199,6 +199,7 @@ class ChitPullSystem {
       this.cup.push({ ...m });
       this._log(`📯 ${m.label}（${m.sub}）がカップに追加されました`);
     }
+    return arrived;
   }
 
   // Blücherの Step1 用：TRTマーカーを全て1マス前進。到着したものを返す。
@@ -390,8 +391,8 @@ class ChitPullSystem {
 
     this.turn++;
     this._log(`━━━ ターン ${this.turn} 開始 ━━━`);
-    this._checkTRT();
-    return { ok: true, turn: this.turn };
+    const arrivedCorps = this._checkTRT();
+    return { ok: true, turn: this.turn, arrivedCorps };
   }
 
   // ---- 状態取得 ----------------------------------------------
