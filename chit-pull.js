@@ -201,6 +201,26 @@ class ChitPullSystem {
     }
   }
 
+  // Blücherの Step1 用：TRTマーカーを全て1マス前進。到着したものを返す。
+  advanceTRTMarkers() {
+    const deployed = [];
+    for (const m of this.trtMarkers) {
+      m.trtTurn = Math.max(this.turn, m.trtTurn - 1);
+    }
+    const arrived = this.trtMarkers.filter(m => m.trtTurn <= this.turn);
+    this.trtMarkers = this.trtMarkers.filter(m => m.trtTurn > this.turn);
+    for (const m of arrived) {
+      this.cup.push({ ...m });
+      deployed.push(m);
+      this._log(`📯 ${m.label}（${m.sub}）TRT前進 → 即時展開・カップへ追加`);
+    }
+    if (arrived.length === 0) {
+      const names = this.trtMarkers.map(m => `${m.label}(→T${m.trtTurn})`).join('、');
+      this._log(`📯 TRTマーカー前進: ${names || 'なし'}`);
+    }
+    return deployed;
+  }
+
   // Blücherの「Forward for the Fatherland!」用：TRTマーカーを個別にロール
   rollTRTForward() {
     const results = [];
@@ -310,6 +330,39 @@ class ChitPullSystem {
     this.drawn = m;
     this._log(`🎌 ${m.label} を使用します`);
     return { ok: true, marker: m };
+  }
+
+  /**
+   * A Bad Day for Napoleon: Napoleonマーカーを1枚除去する。
+   * 優先順位: 保持中 → 使用済み(discarded) → カップ → 全消滅済み(1枚復活)
+   */
+  removeNapoleonMarker() {
+    // 1. 保持中を優先
+    if (this.heldNapoleon.length > 0) {
+      const m = this.heldNapoleon.splice(0, 1)[0];
+      this.discarded.push(m);
+      this._log(`☁️ A Bad Day for Napoleon: 保持中 ${m.label} を除去（残り保持${this.heldNapoleon.length}枚）`);
+      return { ok: true, source: 'held' };
+    }
+    // 2. 使用済み（discarded）から除去
+    const discIdx = this.discarded.findIndex(m => m.type === 'napoleon');
+    if (discIdx >= 0) {
+      const m = this.discarded.splice(discIdx, 1)[0];
+      this._log(`☁️ A Bad Day for Napoleon: 使用済み ${m.label} を除去`);
+      return { ok: true, source: 'discarded' };
+    }
+    // 3. カップから除去
+    const cupIdx = this.cup.findIndex(m => m.type === 'napoleon');
+    if (cupIdx >= 0) {
+      const m = this.cup.splice(cupIdx, 1)[0];
+      this._log(`☁️ A Bad Day for Napoleon: カップ内 ${m.label} を除去`);
+      return { ok: true, source: 'cup' };
+    }
+    // 4. 全て除去済み → 1枚カップに復活（Napoleon recovers!）
+    const recovery = { id: 'napoleon-1', type: 'napoleon', label: 'Napoleon', sub: 'Le Petit Caporal', color: '#ffd700' };
+    this.cup.push(recovery);
+    this._log('☁️ A Bad Day for Napoleon: 全マーカー除去済み → Napoleon recovers! 1枚カップに復活');
+    return { ok: true, source: 'recovery' };
   }
 
   /**

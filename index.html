@@ -246,7 +246,21 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
 .hex-bombard { fill: rgba(255,50,50,0.22); stroke: #ff3333; stroke-width: 2.5; opacity: 1; }
 
 /* ---- Melee highlight ---- */
-.hex-melee   { fill: rgba(255,100,30,0.25); stroke: #ff6622; stroke-width: 2.5; opacity: 1; }
+.hex-melee        { fill: rgba(255,100,30,0.25); stroke: #ff6622; stroke-width: 2.5; opacity: 1; }
+.hex-ai-attacker  { fill: rgba(255,210,0,0.22);  stroke: #ffd700; stroke-width: 2.5; opacity: 1; }
+.hex-ai-target    { fill: rgba(255,50,50,0.22);   stroke: #ff3333; stroke-width: 2.5; opacity: 1; }
+/* ---- Napoleon mode highlights ---- */
+.hex-napoleon     { fill: rgba(255,215,0,0.18);  stroke: #ffd700; stroke-width: 2.5; opacity: 1; }
+
+/* ---- Napoleon mode HUD banner ---- */
+#napoleon-mode-banner {
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  z-index: 40; background: rgba(180,130,0,.92); border: 1px solid #ffd700;
+  border-radius: 0 0 8px 8px; padding: 5px 18px 7px;
+  font-size: 13px; font-weight: bold; color: #fff; display: none;
+  text-align: center; min-width: 360px; pointer-events: none;
+}
+#napoleon-mode-banner.active { display: block; }
 
 /* ---- Bombard result modal ---- */
 #bombard-modal {
@@ -441,6 +455,18 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
       <div id="held-empty" style="color:#555;font-size:11px;padding:2px 0">— なし —</div>
     </div>
 
+    <!-- Allied Condition Flags（Wellington効果） -->
+    <div class="cp-section">Allied Conditions</div>
+    <div id="allied-conditions">
+      <div style="color:#555;font-size:11px;padding:2px 0">— なし —</div>
+    </div>
+
+    <!-- Napoleon Conditions（Pas de Charge / Vive boost） -->
+    <div class="cp-section">Napoleon Conditions</div>
+    <div id="napoleon-conditions">
+      <div style="color:#555;font-size:11px;padding:2px 0">— なし —</div>
+    </div>
+
     <!-- TRT（プロイセン到着スケジュール） -->
     <div class="cp-section">プロイセン TRT</div>
     <div id="trt-list"></div>
@@ -473,10 +499,14 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
     <div id="roll-result-title"></div>
     <div id="roll-result-desc"></div>
     <div id="roll-modal-footer">
+      <button id="btn-roll-ai-exec" class="btn btn-danger" style="display:none">AI実行</button>
       <button id="btn-roll-resolve" class="btn btn-primary">解決済みにする</button>
     </div>
   </div>
 </div>
+
+<!-- Napoleon mode banner -->
+<div id="napoleon-mode-banner"></div>
 
 <!-- Napoleon選択モーダル -->
 <div id="napoleon-modal" class="hidden">
@@ -913,7 +943,42 @@ const units = [
   { id: 'hougoumont_det',   col:  4, row: 9, type: 'infantry',  army: 'allied', small: true,  imageHref: 'images/hougoumount_detachment_front.png',  sp: 2, af: 0, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false, isDetachment: true },
   { id: 'lahayesainte_det', col: 10, row: 7, type: 'infantry',  army: 'allied', small: true,  imageHref: 'images/la_haye_sainte_detachment_front.png', sp: 2, af: 0, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false, isDetachment: true },
   { id: 'papelotte_det',    col: 16, row: 7, type: 'infantry',  army: 'allied', small: true,  imageHref: 'images/papelotte_detachment_front.png',    sp: 1, af: 0, er: 3, hits: 0, battleworn: false, isHeavyArtillery: false, isDetachment: true },
+
+  // ============================================================
+  // フランス軍（暫定配置・sp/af/er は実際のカウンター値で要確認）
+  // ============================================================
+  // I Corps (D'Erlon)
+  { id: 'quiot_I_FR',     col: 13, row: 10, type: 'infantry',  army: 'french', small: false, imageHref: 'images/quiot_I_FR_front.png',     sp: 5, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'donzelot_I_FR',  col: 14, row: 10, type: 'infantry',  army: 'french', small: false, imageHref: 'images/donzelot_I_FR_front.png',  sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'art_I_FR',       col: 14, row: 11, type: 'artillery', army: 'french', small: false, imageHref: 'images/art_I_FR_front.png',       sp: 0, af: 2, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  // II Corps (Reille)
+  { id: 'foy_II_FR',      col:  7, row: 11, type: 'infantry',  army: 'french', small: false, imageHref: 'images/foy_II_FR_front.png',      sp: 5, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'bachelu_II_FR',  col:  6, row: 12, type: 'infantry',  army: 'french', small: false, imageHref: 'images/bachelu_II_FR_front.png',  sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'art_II_FR',      col:  7, row: 12, type: 'artillery', army: 'french', small: false, imageHref: 'images/art_II_FR_front.png',      sp: 0, af: 2, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  // VI Corps (Lobau)
+  { id: 'jeannin_VI_FR',  col: 11, row: 11, type: 'infantry',  army: 'french', small: false, imageHref: 'images/jeannin_VI_FR_front.png',  sp: 3, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  // Cavalry Corps
+  { id: 'kellerman_FR',   col:  5, row: 11, type: 'HC',        army: 'french', small: false, imageHref: 'images/kellerman_FR_front.png',   sp: 4, af: 0, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'milhaud_FR',     col: 15, row: 11, type: 'HC',        army: 'french', small: false, imageHref: 'images/milhaud_FR_front.png',     sp: 4, af: 0, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
+  // Imperial Guard（IG）— Drouot
+  // OG = Old Guard (isOG: true), YG = Young Guard (isYG: true)
+  { id: 'chasseurs_IG_FR',  col: 11, row: 13, type: 'infantry',  army: 'french', small: false, imageHref: 'images/chasseurs_IG_FR_front.png',  sp: 6, af: 1, er: 6, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
+  { id: 'grenadiers_IG_FR', col: 12, row: 13, type: 'infantry',  army: 'french', small: false, imageHref: 'images/grenadiers_IG_FR_front.png', sp: 6, af: 1, er: 6, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
+  { id: 'yg_IG_FR',         col: 10, row: 12, type: 'infantry',  army: 'french', small: false, imageHref: 'images/yg_IG_FR_front.png',         sp: 4, af: 1, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false, isYG: true },
+  { id: 'guyot_IG_FR',      col:  5, row: 12, type: 'HC',        army: 'french', small: false, imageHref: 'images/guyot_IG_FR_front.png',      sp: 4, af: 0, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'lefeb_IG_FR',      col: 15, row: 12, type: 'HC',        army: 'french', small: false, imageHref: 'images/lefeb_IG_FR_front.png',      sp: 4, af: 0, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'ha_IG_FR',         col: 13, row: 13, type: 'artillery', army: 'french', small: false, imageHref: 'images/ha_IG_FR_front.png',         sp: 0, af: 4, er: 4, hits: 0, battleworn: false, isHeavyArtillery: true  },
 ];
+
+// British unit IDs（Thin Red Line / Scum of the Earth 対象）
+const BRITISH_UNIT_IDS = new Set([
+  'cooke_I', 'kielmansegge_I', 'alten_I',
+  'halkett_II', 'mitchell_II', 'clinton_II',
+  '1reserve_RC', '2reserve_RC', 'picton_RC', 'lambert_RC',
+  'somerset_CC', 'ponsonby_CC', 'rightflank_CC', 'vandeleur_CC', 'vivian_CC', 'ha_reserve_CC',
+  'hougoumont_det', 'lahayesainte_det',
+]);
+function isBritish(unit) { return BRITISH_UNIT_IDS.has(unit.id); }
 
 let selectedUnitId = null;          // 選択中ユニットID
 const reachableMap = new Map();     // addr → mustStop（true=停止必須）
@@ -923,6 +988,21 @@ let meleeMode = false;              // 近接攻撃モード中か
 const meleeTargetAddrs = new Set(); // 近接攻撃可能な敵ユニットのアドレスSet
 const combatLog = [];               // 戦闘ログ（最新を先頭）
 
+// AI ハイライト: addr → クラス名（'hex-ai-attacker' | 'hex-ai-target'）
+const aiHighlightAddrs = new Map();
+
+// Allied Condition Flags（Wellington効果、ターン終了時リセット）
+let reverseSlope   = false;  // Reverse Slope Deployment
+let thinRedLine    = false;  // The Thin Red Line
+let scumOfTheEarth = false;  // Scum of the Earth
+
+// Napoleon Action State
+let napoleonMode      = null;   // null | 'sun-austerlitz' | 'vive-lempereur' | 'grand-battery'
+let napoleonModeIdx   = -1;     // heldNapoleon index being used in interactive mode
+let viveBoostUnitId   = null;   // unit to receive ER+2 on next Elan/Panic test
+let pasDeChargeActive = false;  // French units get +1 free MA this activation
+const napoleonTargetAddrs = new Set(); // hexes highlighted for Napoleon interaction
+
 // ============================================================
 // SVG管理
 // ============================================================
@@ -931,9 +1011,10 @@ const mapImg = document.getElementById('map-img');
 
 // hexEls: addr → SVGPolygonElement（createHexGrid が返す Map）
 let hexEls = new Map();
-let unitsLayerEl  = null;
-let riverLayerEl  = null;
-let riverHoverEl  = null;   // ホバー中ヘックスサイドのプレビューライン
+let unitsLayerEl    = null;
+let riverLayerEl    = null;
+let riverHoverEl    = null;   // ホバー中ヘックスサイドのプレビューライン
+let vpControlLayerEl = null;
 
 function setupSVG(W, H) {
   svg.setAttribute('width',   W);
@@ -958,6 +1039,10 @@ function setupSVG(W, H) {
   riverHoverEl.style.display = 'none';
   riverLayerEl.appendChild(riverHoverEl);
   svg.appendChild(riverLayerEl);
+
+  // VP コントロールマーカーレイヤー（ユニットの下）
+  vpControlLayerEl = makeSVGEl('g', { id: 'vp-control-layer' });
+  svg.appendChild(vpControlLayerEl);
 
   // ユニット描画レイヤー（最上層）
   unitsLayerEl = makeSVGEl('g', { id: 'units-layer' });
@@ -1058,6 +1143,13 @@ function isHighlighted(addr) {
 
 function onMouseClick(e) {
   if (e.button !== 0) return;
+
+  // Napoleon interactive mode: hex/unit selection
+  if (napoleonMode) {
+    const h = getHexAt(e.clientX, e.clientY);
+    if (h) handleNapoleonModeClick(h);
+    return;
+  }
 
   // 河川設定モード: クリックでヘックスサイドをトグル
   if (riverEditMode) {
@@ -1283,7 +1375,7 @@ function canLandAt(addr, movingUnit) {
  */
 function computeReachable(unit) {
   reachableMap.clear();
-  const MA = getMA(unit.type);
+  const MA = getMA(unit.type) + (pasDeChargeActive && unit.army === 'french' ? 1 : 0);
   const startAddr = hexAddr(unit.col, unit.row);
 
   // addr → 到達最小コスト
@@ -1337,7 +1429,11 @@ function refreshHighlights() {
   const selAddr = selUnit ? hexAddr(selUnit.col, selUnit.row) : null;
 
   for (const addr of hexEls.keys()) {
-    if (selAddr && addr === selAddr) {
+    if (napoleonTargetAddrs.has(addr)) {
+      setHexClass(addr, 'hex-napoleon');
+    } else if (aiHighlightAddrs.has(addr)) {
+      setHexClass(addr, aiHighlightAddrs.get(addr));
+    } else if (selAddr && addr === selAddr) {
       setHexClass(addr, 'hex-selected');
     } else if (bombardMode && bombardTargetAddrs.has(addr)) {
       setHexClass(addr, 'hex-bombard');
@@ -1451,6 +1547,17 @@ function drawAllUnits() {
       g.appendChild(hitTxt);
     }
 
+    // Vive L'Empereur! 王冠マーク（下辺）
+    if (viveBoostUnitId === unit.id) {
+      const viveTxt = makeSVGEl('text', {
+        x, y: y + IH / 2 - 2,
+        fill: '#ffd700', 'font-size': '13', 'text-anchor': 'middle',
+        'pointer-events': 'none',
+      });
+      viveTxt.textContent = '👑';
+      g.appendChild(viveTxt);
+    }
+
     unitsLayerEl.appendChild(g);
 
     // ユニットクリックで選択（SVGへの伝播を止める）
@@ -1498,11 +1605,18 @@ function moveUnit(unitId, col, row) {
   if (!unit) return;
   unit.col = col;
   unit.row = row;
+  // フランスコントロール更新
+  const dest = hexAddr(col, row);
+  if (unit.army === 'french') {
+    setFrenchControl(dest);
+  } else {
+    clearFrenchControl(dest);
+  }
   selectedUnitId = null;
   reachableMap.clear();
   refreshHighlights();
   drawAllUnits();
-  document.getElementById('hud-piece').textContent = hexAddr(col, row);
+  document.getElementById('hud-piece').textContent = dest;
   setHudState('待機中');
 }
 
@@ -1532,11 +1646,16 @@ function getEffectiveAF(unit) {
   return getUnitStatus(unit) === 'disrupted' ? Math.max(0, af - 1) : af;
 }
 
-/** 有効ER（Shaken/Disrupted時 -1） */
+/** 有効ER（Shaken/Disrupted時 -1、Wellington condition flags対応） */
 function getEffectiveER(unit) {
-  const er = unit.er ?? 4;
+  let er = unit.er ?? 4;
   const st = getUnitStatus(unit);
-  return (st === 'shaken' || st === 'disrupted') ? Math.max(1, er - 1) : er;
+  if (st === 'shaken' || st === 'disrupted') er = Math.max(1, er - 1);
+  if (unit.army === 'allied' && unit.type === 'infantry' && isBritish(unit)) {
+    if (thinRedLine)    er = Math.min(6, er + 1);
+    if (scumOfTheEarth) er = Math.max(1, er - 1);
+  }
+  return er;
 }
 
 // ============================================================
@@ -1553,13 +1672,56 @@ function hexDistance(addrA, addrB) {
 }
 
 // ============================================================
-// ステップロス
+// ステップロス・Elan Test・Panic Test・Rally
 // ============================================================
 
 /**
+ * Elan Test を実行する。
+ * ER=6 の場合、6が出たら再ロールして 4-6 で失敗。
+ * @returns {{ roll:number, reroll:number|null, success:boolean, er:number }}
+ */
+function performElanTest(unit) {
+  const er = getEffectiveER(unit);
+  let viveBonus = 0;
+  if (viveBoostUnitId && unit.id === viveBoostUnitId) {
+    viveBonus = 2;
+    viveBoostUnitId = null; // Vive L'Empereur: 1回使い切り
+    addCombatLog(`[Napoleon] Vive L'Empereur! ${unit.id} ER+2 適用`);
+    renderNapoleonConditions();
+  }
+  const testER = er + viveBonus; // > 6 で実質自動成功
+  const roll = rollD6();
+  if (er >= 6 && roll === 6 && testER <= 6) {
+    const reroll = rollD6();
+    return { roll, reroll, success: reroll <= 3, er, testER };
+  }
+  return { roll, reroll: null, success: roll <= testER, er, testER };
+}
+
+/**
+ * Panic Test を実行する（3rd Hit で Battleworn 転換直後に呼ぶ）。
+ * Detachment: 後退なし・追加1Hit。
+ * 通常ユニット: Elan Test 失敗で1ヘックス後退。
+ */
+function runPanicTest(unit) {
+  if (unit.isDetachment) {
+    addCombatLog(`[${unit.id}] Panic Test（Detachment）→ 後退なし・追加1Hit`);
+    applyHit(unit);
+    return;
+  }
+  const { roll, reroll, success, er } = performElanTest(unit);
+  const rollStr = reroll !== null ? `${roll}→再:${reroll}` : `${roll}`;
+  addCombatLog(`[${unit.id}] Panic Test ER=${er} ダイス:${rollStr} → ${success ? '成功' : '失敗'}`);
+  if (!success) {
+    const msgs = doRetreat(unit, 1);
+    msgs.forEach(m => addCombatLog(m));
+  }
+}
+
+/**
  * ユニットに1 Hit を適用し、ステータスを更新する。
- * 3rd Hit (Fresh面) → Battleworn に裏返し Panic Test 案内。
- * 3rd Hit (Battleworn面) → 2ヘックス後退（要手動処理）案内。
+ * 3rd Hit (Fresh面) → Battleworn に裏返し Panic Test 自動実行。
+ * 3rd Hit (Battleworn面) → 消滅（2ヘックス後退）案内。
  */
 function applyHit(unit) {
   if (!unit.battleworn) {
@@ -1567,7 +1729,8 @@ function applyHit(unit) {
     if (unit.hits >= 3) {
       unit.battleworn = true;
       unit.hits = 0;
-      addCombatLog(`[${unit.id}] Battleworn に！Panic Test を実施してください`);
+      addCombatLog(`[${unit.id}] Battleworn に！`);
+      runPanicTest(unit);
     } else if (unit.hits === 2) {
       addCombatLog(`[${unit.id}] Disrupted（SP/AF/ER -1）`);
     } else {
@@ -1584,6 +1747,21 @@ function applyHit(unit) {
     }
   }
   drawAllUnits();
+}
+
+/**
+ * Unit Action: Rally。
+ * hits を1段階回復（Disrupted→Shaken、Shaken→除去）。
+ * Battleworn 面からの Fresh 回復は不可。
+ */
+function doRally(unit) {
+  if ((unit.hits ?? 0) <= 0) return;
+  const before = getUnitStatus(unit);
+  unit.hits = Math.max(0, (unit.hits ?? 0) - 1);
+  const after = getUnitStatus(unit);
+  addCombatLog(`[${unit.id}] Rally: ${before} → ${after}${unit.battleworn ? '（Battleworn継続）' : ''}`);
+  drawAllUnits();
+  deselect();
 }
 
 // ============================================================
@@ -1678,6 +1856,10 @@ function calcBombardmentDice(attacker, targetAddr, { isDesultory = false } = {})
  * @returns {number} 目標数
  */
 function calcBombardmentTargetNumber(targetAddr, targetUnit) {
+  // Reverse Slope Deployment: RidgeヘックスのAllied Infantry/CavalryはTN=5
+  if (reverseSlope && isRidge(targetAddr) &&
+      targetUnit && targetUnit.army === 'allied' && targetUnit.type !== 'artillery') return 5;
+
   const types = getTerrainTypes(targetAddr);
   let tn;
   if      (types.includes('walled_buildings')) tn = 6;
@@ -1698,7 +1880,7 @@ function rollD6() { return Math.floor(Math.random() * 6) + 1; }
  * 砲撃戦闘を解決し、結果モーダルを表示する。
  * Hit適用はモーダルの「解決済みにする」ボタン押下時に実行。
  */
-function resolveBombardment(attackerUnit, targetUnit, { isDesultory = false } = {}) {
+function resolveBombardment(attackerUnit, targetUnit, { isDesultory = false, onComplete = null } = {}) {
   const targetAddr = hexAddr(targetUnit.col, targetUnit.row);
   const numDice = calcBombardmentDice(attackerUnit, targetAddr, { isDesultory });
   const tn = calcBombardmentTargetNumber(targetAddr, targetUnit);
@@ -1744,6 +1926,7 @@ function resolveBombardment(attackerUnit, targetUnit, { isDesultory = false } = 
       );
       if (hit) applyHit(targetUnit);
       deselect();
+      if (onComplete) onComplete();
     },
   });
 }
@@ -1837,6 +2020,18 @@ function updateHudActions(unit) {
       el.appendChild(btn);
     }
   }
+
+  // Rally ボタン（Hit が 1 以上あるとき）
+  if ((unit.hits ?? 0) > 0) {
+    const btn = makeBtn('Rally', 'btn-primary', () => {
+      bombardMode = false;
+      bombardTargetAddrs.clear();
+      meleeMode = false;
+      meleeTargetAddrs.clear();
+      doRally(unit);
+    });
+    el.appendChild(btn);
+  }
 }
 
 /**
@@ -1861,10 +2056,12 @@ function startBombardMode(unit) {
 // 近接戦闘（Close Combat）
 // ============================================================
 
-/** 有効SP（Disrupted時 -1） */
+/** 有効SP（Disrupted時 -1、Wellington condition flags対応） */
 function getEffectiveSP(unit) {
-  const sp = unit.sp ?? 0;
-  return getUnitStatus(unit) === 'disrupted' ? Math.max(0, sp - 1) : sp;
+  let sp = unit.sp ?? 0;
+  if (getUnitStatus(unit) === 'disrupted') sp = Math.max(0, sp - 1);
+  if (thinRedLine && unit.army === 'allied' && unit.type === 'infantry' && isBritish(unit)) sp++;
+  return sp;
 }
 
 /**
@@ -1897,9 +2094,10 @@ function getValidCloseCombatTargets(attacker) {
  * 攻撃側のダイス数を計算する。
  * SP + Confident + Enfilade + Heavy Cavalry
  */
-function calcMeleeAttackerDice(attacker, defender, attackerAddr, defenderAddr, { confident = false } = {}) {
+function calcMeleeAttackerDice(attacker, defender, attackerAddr, defenderAddr, { confident = false, bonusDice = 0 } = {}) {
   let dice = getEffectiveSP(attacker);
   if (confident) dice++;
+  dice += bonusDice;
   // Enfilade: 防御側ヘックスの隣接友軍（攻撃元除く）
   let enfiladeCount = 0;
   for (const nAddr of neighborAddrs(defenderAddr)) {
@@ -2063,9 +2261,10 @@ function closeMeleeModal() {
  * 近接戦闘フロー全体のエントリーポイント。
  * 各 Step を順番にモーダルで表示し、結果を適用する。
  */
-function resolveCloseCombat(attacker, defender) {
+function resolveCloseCombat(attacker, defender, onComplete = null, { bonusDice = 0 } = {}) {
   const attackerAddr = hexAddr(attacker.col, attacker.row);
   const defenderAddr = hexAddr(defender.col, defender.row);
+  const _done = () => { deselect(); if (onComplete) onComplete(); };
 
   document.getElementById('melee-modal-title').textContent =
     `近接戦闘: ${attacker.id} → ${defender.id}`;
@@ -2097,7 +2296,7 @@ function resolveCloseCombat(attacker, defender) {
             msgs.forEach(m => addCombatLog(m));
             addCombatLog(`近接戦闘: ${attacker.id}→${defender.id} [Cavalry Withdrawal]`);
             addCombatLog(`[${attacker.id}] → ${defenderAddr} に前進`);
-            deselect();
+            _done();
           }},
           { label: '戦闘する', cls: 'btn-danger', cb: () => {
             closeMeleeModal();
@@ -2161,16 +2360,16 @@ function resolveCloseCombat(attacker, defender) {
                   closeMeleeModal();
                   const af = getEffectiveAF(attacker);
                   if (af > 0) {
-                    resolveBombardment(attacker, defender, { isDesultory: true });
+                    resolveBombardment(attacker, defender, { isDesultory: true, onComplete: _done });
                   } else {
                     addCombatLog(`${attacker.id}: AF=0のためDesultory Fire不可`);
-                    deselect();
+                    _done();
                   }
                 }},
                 { label: '攻撃中止', cls: 'btn-neutral', cb: () => {
                   closeMeleeModal();
                   addCombatLog(`近接戦闘: ${attacker.id}→${defender.id} [Close to Contact 失敗・中止]`);
-                  deselect();
+                  _done();
                 }},
               ]);
             } else {
@@ -2180,7 +2379,7 @@ function resolveCloseCombat(attacker, defender) {
                 { label: '閉じる', cls: 'btn-neutral', cb: () => {
                   closeMeleeModal();
                   addCombatLog(`近接戦闘: ${attacker.id}→${defender.id} [Close to Contact 失敗]`);
-                  deselect();
+                  _done();
                 }},
               ]);
             }
@@ -2240,12 +2439,13 @@ function resolveCloseCombat(attacker, defender) {
       attacker, defender, attackerAddr, defenderAddr,
       { formSquareSuccess, formSquareFail }
     );
-    const atkDice = calcMeleeAttackerDice(attacker, defender, attackerAddr, defenderAddr, { confident });
+    const atkDice = calcMeleeAttackerDice(attacker, defender, attackerAddr, defenderAddr, { confident, bonusDice });
     const defDice = calcMeleeDefenderDice(attacker, defender, attackerAddr, defenderAddr);
 
     // ボーナス説明
     const atkBonuses = [];
     if (confident) atkBonuses.push('Confident +1');
+    if (bonusDice > 0) atkBonuses.push(`Wellington +${bonusDice}`);
     const enfiladeCount = Math.min(2, neighborAddrs(defenderAddr).filter(nAddr =>
       nAddr !== attackerAddr && getUnitsAt(nAddr).some(u => u.army === attacker.army)
     ).length);
@@ -2362,7 +2562,7 @@ function resolveCloseCombat(attacker, defender) {
     logs.forEach(m => addCombatLog(m));
 
     drawAllUnits();
-    deselect();
+    _done();
   }
 
   // フロー開始
@@ -2387,6 +2587,1402 @@ function startMeleeMode(unit) {
     ? `${unit.id} 近接攻撃モード — ターゲットをクリック (${targets.length}体)`
     : `${unit.id} — 近接攻撃可能ターゲットなし`;
   setHudState(msg);
+}
+
+// ============================================================
+// 敵AI判定 — Anglo-Allied / Prussian Corps Activation
+// ============================================================
+
+const BRUSSELS_VP_ADDRS = new Set(['0301','0401','0701','0901','1401']);
+
+// VP_HEXES: 全VPヘックス定義（addr, vp, type）
+// type: 'WB'=Walled Building, 'ALOC'=Allied LOC, 'B'=Building, 'FLOC'=French LOC
+const VP_HEXES = [
+  { addr:'0409', vp: 6, type:'WB'   },  // Hougoumont
+  { addr:'0204', vp: 5, type:'ALOC' },  // Merbe-Braine
+  { addr:'0802', vp: 5, type:'ALOC' },  // Mont St. Jean
+  { addr:'1007', vp: 4, type:'WB'   },  // La Haye Sainte
+  { addr:'0903', vp: 3, type:'ALOC' },  // Mont St. Jean Farm
+  { addr:'0104', vp: 3, type:'ALOC' },  // Road to Hal
+  { addr:'0301', vp: 3, type:'ALOC' },  // Road to Brussels
+  { addr:'0401', vp: 3, type:'ALOC' },
+  { addr:'0701', vp: 3, type:'ALOC' },
+  { addr:'0901', vp: 3, type:'ALOC' },
+  { addr:'1401', vp: 3, type:'ALOC' },
+  { addr:'1607', vp: 2, type:'WB'   },  // Papelotte
+  { addr:'1412', vp: 1, type:'B'    },  // Plancenoit
+  { addr:'1413', vp: 1, type:'B'    },
+  { addr:'1512', vp: 1, type:'B'    },
+  { addr:'1110', vp:-4, type:'FLOC' },  // La Belle Alliance
+  { addr:'1015', vp:-6, type:'FLOC' },  // Rossomme
+];
+const ALL_VP_ADDRS = new Set(VP_HEXES.map(h => h.addr));
+
+// フランスコントロールヘックス（French unitが最後に占有したVPヘックス）
+const frenchControlHexes = new Set();
+
+function setAIHighlights(attackerAddr, targetAddr) {
+  aiHighlightAddrs.clear();
+  if (attackerAddr) aiHighlightAddrs.set(attackerAddr, 'hex-ai-attacker');
+  if (targetAddr)   aiHighlightAddrs.set(targetAddr,   'hex-ai-target');
+  refreshHighlights();
+}
+
+function clearAIHighlights() {
+  aiHighlightAddrs.clear();
+  refreshHighlights();
+}
+
+/** コープスマーカーから所属ユニットを返す */
+function getCorpsUnits(marker) {
+  if (marker.type === 'allied') {
+    if (marker.id === 'aa-I')   return units.filter(u => u.army === 'allied' && u.id.endsWith('_I') && !u.isDetachment);
+    if (marker.id === 'aa-II')  return units.filter(u => u.army === 'allied' && u.id.endsWith('_II'));
+    if (marker.id === 'aa-RC')  return units.filter(u => u.army === 'allied' && u.id.endsWith('_RC'));
+    if (marker.id === 'aa-CC')  return units.filter(u => u.army === 'allied' && u.id.endsWith('_CC'));
+    if (marker.id === 'aa-det') return units.filter(u => u.isDetachment);
+  }
+  if (marker.type === 'prussian') {
+    return units.filter(u => u.army === 'prussian');
+  }
+  return [];
+}
+
+/** 生存中のフランスユニット一覧（現在は全フランスユニット） */
+function getFrenchUnits() {
+  return units.filter(u => u.army === 'french');
+}
+
+/**
+ * ターゲット優先順位でソートされたユニットリストを返す。
+ * refAddr: 「最近」判定の基準アドレス（省略時はSP比較から開始）
+ */
+function getEnemyTargetPriority(candidates, refAddr = null) {
+  return [...candidates].sort((a, b) => {
+    if (refAddr !== null) {
+      const da = hexDistance(hexAddr(a.col, a.row), refAddr);
+      const db = hexDistance(hexAddr(b.col, b.row), refAddr);
+      if (da !== db) return da - db;
+    }
+    const spDiff = getEffectiveSP(b) - getEffectiveSP(a);
+    if (spDiff !== 0) return spDiff;
+    const erDiff = getEffectiveER(a) - getEffectiveER(b);
+    if (erDiff !== 0) return erDiff;
+    return (b.hits || 0) - (a.hits || 0);
+  });
+}
+
+/**
+ * 有効砲撃ターゲットの中から、Brussels VP hexに隣接/在中を優先して選択する。
+ * primarySort: ターゲット選択の優先キー ('nearest' or 'largest')
+ */
+function selectAIBombardTarget(attacker, validTargets, primarySort = 'nearest') {
+  if (validTargets.length === 0) return null;
+  const attackerAddr = hexAddr(attacker.col, attacker.row);
+
+  const vpPriority = validTargets.filter(t => {
+    const ta = hexAddr(t.col, t.row);
+    return BRUSSELS_VP_ADDRS.has(ta) || neighborAddrs(ta).some(n => BRUSSELS_VP_ADDRS.has(n));
+  });
+
+  const pool = vpPriority.length > 0 ? vpPriority : validTargets;
+  const refAddr = primarySort === 'nearest' ? attackerAddr : null;
+  return getEnemyTargetPriority(pool, refAddr)[0] || null;
+}
+
+/**
+ * AI砲撃ステップ：結果モーダルを表示し、「解決」後に onDone を呼ぶ。
+ */
+function aiResolveBombardmentStep(attacker, target, onDone) {
+  setAIHighlights(hexAddr(attacker.col, attacker.row), hexAddr(target.col, target.row));
+
+  const targetAddr = hexAddr(target.col, target.row);
+  const numDice = calcBombardmentDice(attacker, targetAddr);
+  const tn = calcBombardmentTargetNumber(targetAddr, target);
+  const isDetachWB = !!(target.isDetachment && getTerrainTypes(targetAddr).includes('walled_buildings'));
+  const rolls = Array.from({ length: numDice }, rollD6);
+
+  let successes = 0, partials = 0;
+  if (isDetachWB) {
+    successes = Math.floor(rolls.filter(r => r === 6).length / 2);
+  } else {
+    for (const r of rolls) {
+      if      (r > tn)  successes++;
+      else if (r === tn) partials++;
+    }
+    successes += Math.floor(partials / 2);
+    partials   = partials % 2;
+  }
+  const hit = successes >= 1;
+
+  const attackerAddr = hexAddr(attacker.col, attacker.row);
+  const bonuses = ['[AI自動]'];
+  if (isRidge(attackerAddr) && !isRidge(targetAddr)) bonuses.push('Plunging Fire +1');
+  if (hexDistance(attackerAddr, targetAddr) === 1)   bonuses.push('Canister +1');
+  if (isDetachWB) bonuses.push('Detachment in WB (6×2必要)');
+
+  showBombardModal({
+    attackerUnit: attacker, targetUnit: target, targetAddr,
+    numDice, tn, rolls, successes, partials, hit, isDetachWB, bonuses,
+    onResolve: () => {
+      addCombatLog(`[AI] 砲撃: ${attacker.id}→${target.id} [${rolls.join(',')}] TN${tn} → ${hit ? '1 Hit!' : 'No Hit'}`);
+      if (hit) applyHit(target);
+      clearAIHighlights();
+      drawAllUnits();
+      onDone();
+    },
+  });
+}
+
+/** アクション配列を順番に実行（各アクションは onDone コールバックを受け取る関数） */
+function executeActionsSequentially(actions, onComplete) {
+  function next(i) {
+    if (i >= actions.length) { onComplete(); return; }
+    actions[i](() => next(i + 1));
+  }
+  next(0);
+}
+
+// ---- 11-23: Open Fire at Nearest Target ----
+
+function resolveOpenFireNearest(corpUnits, onDone) {
+  const actions = [];
+  for (const unit of corpUnits) {
+    const targets = getValidBombardmentTargets(unit);
+    if (targets.length === 0) continue;
+    const target = selectAIBombardTarget(unit, targets, 'nearest');
+    if (!target) continue;
+    const u = unit, t = target;
+    actions.push(done => aiResolveBombardmentStep(u, t, done));
+  }
+  if (actions.length === 0) {
+    addCombatLog('[AI] Open Fire at Nearest: 有効ターゲットなし');
+    onDone();
+    return;
+  }
+  executeActionsSequentially(actions, onDone);
+}
+
+// ---- 24-33: Open Fire at Largest Target ----
+
+function resolveOpenFireLargest(corpUnits, onDone) {
+  const actions = [];
+  for (const unit of corpUnits) {
+    const targets = getValidBombardmentTargets(unit);
+    if (targets.length === 0) continue;
+    const target = selectAIBombardTarget(unit, targets, 'largest');
+    if (!target) continue;
+    const u = unit, t = target;
+    actions.push(done => aiResolveBombardmentStep(u, t, done));
+  }
+  if (actions.length === 0) {
+    addCombatLog('[AI] Open Fire at Largest: 有効ターゲットなし');
+    onDone();
+    return;
+  }
+  executeActionsSequentially(actions, onDone);
+}
+
+// ---- 43-53: Rally Around the Colors ----
+
+function resolveRallyAroundColors(corpUnits, onDone) {
+  const bombardActions = [];
+
+  for (const unit of corpUnits) {
+    const unitAddr = hexAddr(unit.col, unit.row);
+
+    if ((unit.hits || 0) > 0) {
+      if (isEnemyAdjacentTo(unitAddr, unit.army)) {
+        const msgs = doRetreat(unit, 1);
+        msgs.forEach(m => addCombatLog(`[AI] ${m}`));
+      }
+      doRally(unit);
+    } else {
+      const targets = getValidBombardmentTargets(unit);
+      if (targets.length === 0) continue;
+      // VP hex 最近のフランスユニットを優先
+      const sorted = [...targets].sort((a, b) => {
+        const da = Math.min(...[...ALL_VP_ADDRS].map(vp => hexDistance(hexAddr(a.col, a.row), vp)));
+        const db = Math.min(...[...ALL_VP_ADDRS].map(vp => hexDistance(hexAddr(b.col, b.row), vp)));
+        return da - db;
+      });
+      const target = sorted[0];
+      if (!target) continue;
+      const u = unit, t = target;
+      bombardActions.push(done => aiResolveBombardmentStep(u, t, done));
+    }
+  }
+
+  drawAllUnits();
+
+  if (bombardActions.length === 0) {
+    onDone();
+    return;
+  }
+  executeActionsSequentially(bombardActions, onDone);
+}
+
+// ---- 64-66: A Bad Day for Napoleon ----
+
+function resolveBadDayForNapoleon() {
+  const result = cps.removeNapoleonMarker();
+  const msg = result.source === 'recovery'
+    ? '[AI] A Bad Day for Napoleon: Napoleon recovers! 1枚カップ復活'
+    : `[AI] A Bad Day for Napoleon: マーカー除去（${result.source}）`;
+  addCombatLog(msg);
+  renderChitUI(cps.getState());
+}
+
+// ============================================================
+// 敵AI Phase 2 — Advance (34-42)
+// ============================================================
+
+/**
+ * BFSで移動可能ヘックスをローカルに計算し Map を返す（グローバル状態を汚染しない）。
+ */
+function computeReachableLocal(unit) {
+  const MA = getMA(unit.type);
+  const startAddr = hexAddr(unit.col, unit.row);
+  const costMap = new Map([[startAddr, 0]]);
+  const queue   = [{ addr: startAddr, cost: 0 }];
+  const result  = new Map(); // addr → mustStop
+
+  while (queue.length > 0) {
+    const { addr, cost } = queue.shift();
+    for (const nAddr of neighborAddrs(addr)) {
+      if (isRiverCrossing(addr, nAddr)) continue;
+      if (getUnitsAt(nAddr).some(u => u.army !== unit.army)) continue;
+      const moveCost = getMoveCost(addr, nAddr);
+      const newCost  = cost + moveCost;
+      if (newCost > MA) continue;
+      if ((costMap.get(nAddr) ?? Infinity) <= newCost) continue;
+      costMap.set(nAddr, newCost);
+      const col = parseInt(nAddr.slice(0, 2), 10);
+      if (unit.army === 'french' && !prussianDeployed && (col === 19 || col === 20)) continue;
+      const onRoad     = isOnRoad(addr, nAddr);
+      const isDifficult = isDifficultTerrain(nAddr) && !onRoad;
+      const hasEnemyAdj = isEnemyAdjacentTo(nAddr, unit.army);
+      const mustStop    = isDifficult || hasEnemyAdj;
+      if (canLandAt(nAddr, unit)) result.set(nAddr, mustStop);
+      if (!mustStop) queue.push({ addr: nAddr, cost: newCost });
+    }
+  }
+  return result;
+}
+
+/**
+ * 候補ヘックスに優先順位スコアを付けて最良1件を返す。
+ * CLAUDE.md 移動ヘックス選択優先順位に従う。
+ */
+function applyHexPriority(candidates, unit, fromAddr) {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+  return [...candidates].sort((a, b) => {
+    const aE = !isEnemyAdjacentTo(a, unit.army) ? 1 : 0;
+    const bE = !isEnemyAdjacentTo(b, unit.army) ? 1 : 0;
+    if (aE !== bE) return bE - aE;
+    const aSE = isRidge(a) === isRidge(fromAddr) ? 1 : 0;
+    const bSE = isRidge(b) === isRidge(fromAddr) ? 1 : 0;
+    if (aSE !== bSE) return bSE - aSE;
+    // 最終ヘックス = Ridge/Woods/Buildings/WBが理想
+    const aGood = (isRidge(a) || isDifficultTerrain(a)) ? 1 : 0;
+    const bGood = (isRidge(b) || isDifficultTerrain(b)) ? 1 : 0;
+    if (aGood !== bGood) return bGood - aGood;
+    const aOcc = getUnitsAt(a).filter(u => u.id !== unit.id).length === 0 ? 1 : 0;
+    const bOcc = getUnitsAt(b).filter(u => u.id !== unit.id).length === 0 ? 1 : 0;
+    if (aOcc !== bOcc) return bOcc - aOcc;
+    return 0;
+  })[0];
+}
+
+/**
+ * ユニットをターゲットアドレスに向かって移動させる。
+ * stopAtDist > 0 ならそのhex距離での停止を優先（Cavalry 2hex前など）。
+ * 移動先アドレスを返す（移動できなければ null）。
+ */
+function moveTowardTarget(unit, targetAddr, stopAtDist = 0) {
+  const reachable = computeReachableLocal(unit);
+  if (reachable.size === 0) return null;
+  const fromAddr = hexAddr(unit.col, unit.row);
+  let candidates = [...reachable.keys()];
+
+  if (stopAtDist > 0) {
+    const atDist = candidates.filter(a => hexDistance(a, targetAddr) === stopAtDist);
+    if (atDist.length > 0) {
+      candidates = atDist;
+    } else {
+      candidates.sort((a, b) => hexDistance(a, targetAddr) - hexDistance(b, targetAddr));
+      const minD = hexDistance(candidates[0], targetAddr);
+      candidates = candidates.filter(a => hexDistance(a, targetAddr) === minD);
+    }
+  } else {
+    candidates.sort((a, b) => hexDistance(a, targetAddr) - hexDistance(b, targetAddr));
+    const minD = hexDistance(candidates[0], targetAddr);
+    candidates = candidates.filter(a => hexDistance(a, targetAddr) === minD);
+  }
+
+  const chosen = applyHexPriority(candidates, unit, fromAddr);
+  if (!chosen || chosen === fromAddr) return null;
+
+  unit.col = parseInt(chosen.slice(0, 2), 10);
+  unit.row = parseInt(chosen.slice(2), 10);
+  return chosen;
+}
+
+/**
+ * Cavalry Charge が可能か判定する。
+ * - 距離2hex以内、LOS通視
+ * - 目標がwoods/buildings/walled_buildingsにいない
+ * - 距離2のとき：経路中間ヘックスにdifficult/river がない
+ */
+function isCavalryChargeEligible(attacker, target) {
+  const aAddr = hexAddr(attacker.col, attacker.row);
+  const tAddr = hexAddr(target.col, target.row);
+  const dist  = hexDistance(aAddr, tAddr);
+  if (dist < 1 || dist > 2) return false;
+  if (!calcLOS(aAddr, tAddr))      return false;
+  if (isDifficultTerrain(tAddr))   return false;
+  if (dist === 1) {
+    return !isRiverCrossing(aAddr, tAddr);
+  }
+  // dist === 2: need a clear intermediate hex
+  const intermediates = neighborAddrs(aAddr).filter(n =>
+    neighborAddrs(n).includes(tAddr) &&
+    !isDifficultTerrain(n)           &&
+    !isRiverCrossing(aAddr, n)       &&
+    !isRiverCrossing(n, tAddr)
+  );
+  return intermediates.length > 0;
+}
+
+/** AI主導の近接戦闘（ハイライト付き、onDone コールバック） */
+function aiResolveCloseCombat(attacker, defender, onDone, bonusDice = 0) {
+  setAIHighlights(hexAddr(attacker.col, attacker.row), hexAddr(defender.col, defender.row));
+  resolveCloseCombat(attacker, defender, () => {
+    clearAIHighlights();
+    drawAllUnits();
+    onDone();
+  }, { bonusDice });
+}
+
+// ---- Advance: Artillery ----
+function advanceArtillery(unit, onDone) {
+  const targets = getValidBombardmentTargets(unit);
+  if (targets.length > 0) {
+    const unitAddr = hexAddr(unit.col, unit.row);
+    const target = getEnemyTargetPriority(targets, unitAddr)[0];
+    aiResolveBombardmentStep(unit, target, onDone);
+  } else {
+    const french = getFrenchUnits();
+    if (french.length === 0) { onDone(); return; }
+    const unitAddr = hexAddr(unit.col, unit.row);
+    const nearestFrench = getEnemyTargetPriority(french, unitAddr)[0];
+    const moved = moveTowardTarget(unit, hexAddr(nearestFrench.col, nearestFrench.row));
+    addCombatLog(`[AI] ${unit.id} 接近移動 → ${moved || '移動不可'}`);
+    drawAllUnits();
+    onDone();
+  }
+}
+
+// ---- Advance: Infantry（variant: 'allied'|'prussian'） ----
+function advanceInfantry(unit, variant, onDone) {
+  const french = getFrenchUnits();
+  if (french.length === 0) { onDone(); return; }
+  const unitAddr = hexAddr(unit.col, unit.row);
+  const target   = getEnemyTargetPriority(french, unitAddr)[0];
+  const tAddr    = hexAddr(target.col, target.row);
+  const dist     = hexDistance(unitAddr, tAddr);
+
+  if (dist === 2) {
+    const af = getEffectiveAF(unit);
+    if (af > 0 && calcLOS(unitAddr, tAddr)) {
+      aiResolveBombardmentStep(unit, target, onDone);
+    } else {
+      const moved = moveTowardTarget(unit, tAddr);
+      addCombatLog(`[AI] ${unit.id} 接近移動 → ${moved || '移動不可'}`);
+      drawAllUnits();
+      onDone();
+    }
+  } else if (dist === 1) {
+    const shouldAttack = variant === 'prussian' || target.battleworn;
+    if (shouldAttack) {
+      aiResolveCloseCombat(unit, target, onDone);
+    } else {
+      const af = getEffectiveAF(unit);
+      if (af > 0) {
+        aiResolveBombardmentStep(unit, target, onDone);
+      } else {
+        addCombatLog(`[AI] ${unit.id}: 砲撃不可・待機`);
+        onDone();
+      }
+    }
+  } else {
+    const moved = moveTowardTarget(unit, tAddr);
+    addCombatLog(`[AI] ${unit.id} 接近移動 → ${moved || '移動不可'}`);
+    if (moved) setAIHighlights(unitAddr, moved);
+    drawAllUnits();
+    setTimeout(() => { clearAIHighlights(); onDone(); }, 400);
+  }
+}
+
+// ---- Advance: Cavalry（variant: 'allied'|'prussian'） ----
+function advanceCavalry(unit, variant, onDone) {
+  const french = getFrenchUnits();
+  if (french.length === 0) { onDone(); return; }
+  const unitAddr = hexAddr(unit.col, unit.row);
+  const target   = getEnemyTargetPriority(french, unitAddr)[0];
+  const tAddr    = hexAddr(target.col, target.row);
+  const dist     = hexDistance(unitAddr, tAddr);
+
+  if (dist <= 2) {
+    const canCharge = isCavalryChargeEligible(unit, target);
+    const chargeCondition = variant === 'allied'
+      ? canCharge
+      : canCharge && target.battleworn;
+
+    if (chargeCondition) {
+      aiResolveCloseCombat(unit, target, onDone);
+    } else {
+      // 砲撃（Cavalry は通常 AF=0 なので多くは移動へフォールスルー）
+      const af = getEffectiveAF(unit);
+      if (af > 0 && calcLOS(unitAddr, tAddr)) {
+        aiResolveBombardmentStep(unit, target, onDone);
+      } else {
+        addCombatLog(`[AI] ${unit.id}: 砲撃不可・待機`);
+        onDone();
+      }
+    }
+  } else {
+    // 2hex手前まで移動
+    const moved = moveTowardTarget(unit, tAddr, 2);
+    addCombatLog(`[AI] ${unit.id} 接近移動(2hex手前) → ${moved || '移動不可'}`);
+    if (moved) setAIHighlights(unitAddr, moved);
+    drawAllUnits();
+    setTimeout(() => { clearAIHighlights(); onDone(); }, 400);
+  }
+}
+
+// ---- 34-42: Advance ----
+
+function resolveAdvance(corpUnits, marker, onDone) {
+  const isAllied = marker.type === 'allied';
+  const actions  = [];
+
+  for (const unit of corpUnits) {
+    const u = unit;
+    if (unit.type === 'artillery') {
+      actions.push(done => advanceArtillery(u, done));
+    } else if (unit.type === 'infantry') {
+      const variant = isAllied ? 'allied' : 'prussian';
+      actions.push(done => advanceInfantry(u, variant, done));
+    } else { // HC / LC
+      const variant = isAllied ? 'allied' : 'prussian';
+      actions.push(done => advanceCavalry(u, variant, done));
+    }
+  }
+
+  if (actions.length === 0) {
+    addCombatLog('[AI] Advance: 対象ユニットなし');
+    onDone();
+    return;
+  }
+  executeActionsSequentially(actions, onDone);
+}
+
+// ============================================================
+// 敵AI Phase 3 — Reinforce/Recapture (54-63)
+// ============================================================
+
+/**
+ * VPヘックスが「対応が必要な状態」か判定する。
+ * 条件: フランスコントロール OR フランスユニット隣接
+ * 距離制限: unitAddrから4hex以内（Road to Brussels VPはisAllied時に制限なし）
+ */
+function isQualifiedVPHex(addr, unitAddr, isAllied) {
+  const frenchOn  = frenchControlHexes.has(addr) ||
+                    getUnitsAt(addr).some(u => u.army === 'french');
+  const frenchAdj = neighborAddrs(addr).some(n =>
+    getUnitsAt(n).some(u => u.army === 'french'));
+  if (!frenchOn && !frenchAdj) return false;
+
+  const dist = hexDistance(addr, unitAddr);
+  if (dist <= 4) return true;
+  // Road to Brussels exception: no distance limit for allied
+  return isAllied && BRUSSELS_VP_ADDRS.has(addr);
+}
+
+/**
+ * Reinforceアクション: 最寄りの対応が必要なVPヘックスを返す。
+ * なければ null。
+ */
+function getNearestQualifiedVP(unitAddr, isAllied) {
+  const candidates = VP_HEXES
+    .filter(h => isQualifiedVPHex(h.addr, unitAddr, isAllied))
+    .map(h => ({ ...h, dist: hexDistance(h.addr, unitAddr) }))
+    .sort((a, b) => a.dist - b.dist || b.vp - a.vp);
+  return candidates[0] || null;
+}
+
+// ---- Reinforce: Allied Infantry ----
+function reinforceAlliedInfantry(unit, onDone) {
+  const unitAddr = hexAddr(unit.col, unit.row);
+  // すでに対象VPヘックスにいるか隣接しているか判定
+  const isAtOrAdjVP = ALL_VP_ADDRS.has(unitAddr)
+    ? isQualifiedVPHex(unitAddr, unitAddr, true)
+    : neighborAddrs(unitAddr).some(n => isQualifiedVPHex(n, unitAddr, true));
+
+  if (isAtOrAdjVP) {
+    // 近くのフランスユニットを砲撃
+    const targets = getValidBombardmentTargets(unit);
+    if (targets.length > 0) {
+      const tgt = getEnemyTargetPriority(targets, unitAddr)[0];
+      aiResolveBombardmentStep(unit, tgt, onDone);
+      return;
+    }
+    addCombatLog(`[AI Reinforce] ${unit.id}: 砲撃ターゲットなし・待機`);
+    onDone();
+  } else {
+    const vpHex = getNearestQualifiedVP(unitAddr, true);
+    if (!vpHex) {
+      addCombatLog(`[AI Reinforce] ${unit.id}: 対象VPヘックスなし・待機`);
+      onDone();
+      return;
+    }
+    const moved = moveTowardTarget(unit, vpHex.addr);
+    addCombatLog(`[AI Reinforce] ${unit.id} → VP${vpHex.addr}へ移動: ${moved || '移動不可'}`);
+    if (moved) setAIHighlights(unitAddr, moved);
+    drawAllUnits();
+    setTimeout(() => { clearAIHighlights(); onDone(); }, 400);
+  }
+}
+
+// ---- Reinforce: Allied Cavalry ----
+function reinforceAlliedCavalry(unit, onDone) {
+  const unitAddr = hexAddr(unit.col, unit.row);
+  const french = getFrenchUnits();
+  if (french.length === 0) { onDone(); return; }
+
+  // Charge eligible なフランスユニット（VP近く優先）
+  const chargeTargets = french.filter(f => isCavalryChargeEligible(unit, f));
+  if (chargeTargets.length > 0) {
+    const tgt = getEnemyTargetPriority(chargeTargets, unitAddr)[0];
+    aiResolveCloseCombat(unit, tgt, onDone);
+    return;
+  }
+
+  // 砲撃
+  const targets = getValidBombardmentTargets(unit);
+  if (targets.length > 0) {
+    const tgt = getEnemyTargetPriority(targets, unitAddr)[0];
+    aiResolveBombardmentStep(unit, tgt, onDone);
+    return;
+  }
+
+  // VPヘックスへ移動
+  const vpHex = getNearestQualifiedVP(unitAddr, true);
+  const dest = vpHex ? vpHex.addr : null;
+  if (dest) {
+    const moved = moveTowardTarget(unit, dest, 2);
+    addCombatLog(`[AI Reinforce] ${unit.id} → VP${dest}へ移動: ${moved || '移動不可'}`);
+    if (moved) setAIHighlights(unitAddr, moved);
+    drawAllUnits();
+    setTimeout(() => { clearAIHighlights(); onDone(); }, 400);
+  } else {
+    addCombatLog(`[AI Reinforce] ${unit.id}: 対象VPヘックスなし・待機`);
+    onDone();
+  }
+}
+
+// ---- Reinforce: Prussian units ----
+// Prussian目標: IV Corps(Bülow)/II Corps(Pirch I) → Plancenoit(1512), I Corps(Ziethen) → Papelotte(1607)
+const PRUSSIAN_REINFORCE_TARGET = {
+  'pr-IV': '1512',
+  'pr-II': '1512',
+  'pr-I':  '1607',
+};
+
+function reinforcePrussianInfantry(unit, targetAddr, onDone) {
+  const unitAddr = hexAddr(unit.col, unit.row);
+  const dist = hexDistance(unitAddr, targetAddr);
+  const frenchAtTarget = getUnitsAt(targetAddr).some(u => u.army === 'french');
+  const frenchAdjTarget = neighborAddrs(targetAddr).some(n =>
+    getUnitsAt(n).some(u => u.army === 'french'));
+
+  if (dist <= 1 && (frenchAtTarget || frenchAdjTarget)) {
+    // フランスがいれば攻撃 or 砲撃
+    const adjFrench = neighborAddrs(unitAddr).flatMap(n =>
+      getUnitsAt(n).filter(f => f.army === 'french'));
+    if (adjFrench.length > 0) {
+      const tgt = getEnemyTargetPriority(adjFrench, unitAddr)[0];
+      if (tgt.battleworn) {
+        aiResolveCloseCombat(unit, tgt, onDone);
+      } else {
+        const af = getEffectiveAF(unit);
+        if (af > 0 && calcLOS(unitAddr, hexAddr(tgt.col, tgt.row))) {
+          aiResolveBombardmentStep(unit, tgt, onDone);
+        } else {
+          addCombatLog(`[AI Reinforce] ${unit.id}: 砲撃不可・待機`);
+          onDone();
+        }
+      }
+    } else {
+      addCombatLog(`[AI Reinforce] ${unit.id}: 隣接フランスなし・待機`);
+      onDone();
+    }
+  } else {
+    const moved = moveTowardTarget(unit, targetAddr);
+    addCombatLog(`[AI Reinforce] ${unit.id} → ${targetAddr}へ移動: ${moved || '移動不可'}`);
+    if (moved) setAIHighlights(unitAddr, moved);
+    drawAllUnits();
+    setTimeout(() => { clearAIHighlights(); onDone(); }, 400);
+  }
+}
+
+function reinforcePrussianCavalry(unit, targetAddr, onDone) {
+  const unitAddr = hexAddr(unit.col, unit.row);
+  const french = getFrenchUnits();
+  if (french.length === 0) { onDone(); return; }
+
+  // BW Cavalry charge eligible
+  const bwTargets = french.filter(f => f.battleworn && isCavalryChargeEligible(unit, f));
+  if (bwTargets.length > 0) {
+    const tgt = getEnemyTargetPriority(bwTargets, unitAddr)[0];
+    aiResolveCloseCombat(unit, tgt, onDone);
+    return;
+  }
+
+  // 砲撃
+  const targets = getValidBombardmentTargets(unit);
+  if (targets.length > 0) {
+    const tgt = getEnemyTargetPriority(targets, unitAddr)[0];
+    aiResolveBombardmentStep(unit, tgt, onDone);
+    return;
+  }
+
+  // 目標地点へ移動
+  const moved = moveTowardTarget(unit, targetAddr, 2);
+  addCombatLog(`[AI Reinforce] ${unit.id} → ${targetAddr}へ移動: ${moved || '移動不可'}`);
+  if (moved) setAIHighlights(unitAddr, moved);
+  drawAllUnits();
+  setTimeout(() => { clearAIHighlights(); onDone(); }, 400);
+}
+
+// ---- Reinforce: Artillery（共通） ----
+function reinforceArtillery(unit, onDone) {
+  const unitAddr = hexAddr(unit.col, unit.row);
+  // 対象VPヘックス近くのフランスを砲撃
+  const targets = getValidBombardmentTargets(unit).filter(t => {
+    const ta = hexAddr(t.col, t.row);
+    return ALL_VP_ADDRS.has(ta) ||
+           neighborAddrs(ta).some(n => ALL_VP_ADDRS.has(n));
+  });
+  if (targets.length > 0) {
+    const tgt = getEnemyTargetPriority(targets, unitAddr)[0];
+    aiResolveBombardmentStep(unit, tgt, onDone);
+    return;
+  }
+  // VP近くのフランスへ接近
+  const french = getFrenchUnits().filter(f => {
+    const fa = hexAddr(f.col, f.row);
+    return ALL_VP_ADDRS.has(fa) || neighborAddrs(fa).some(n => ALL_VP_ADDRS.has(n));
+  });
+  const approachTargets = french.length > 0 ? french : getFrenchUnits();
+  if (approachTargets.length === 0) { onDone(); return; }
+  const nearest = getEnemyTargetPriority(approachTargets, unitAddr)[0];
+  const moved = moveTowardTarget(unit, hexAddr(nearest.col, nearest.row));
+  addCombatLog(`[AI Reinforce] ${unit.id} 接近 → ${moved || '移動不可'}`);
+  drawAllUnits();
+  onDone();
+}
+
+// ---- 54-63: Reinforce/Recapture ----
+
+function resolveReinforceRecapture(corpUnits, marker, onDone) {
+  const isAllied = marker.type === 'allied';
+  const prTarget = PRUSSIAN_REINFORCE_TARGET[marker.id] || '1512';
+  const actions  = [];
+
+  for (const unit of corpUnits) {
+    const u = unit;
+    if (unit.type === 'artillery') {
+      actions.push(done => reinforceArtillery(u, done));
+    } else if (isAllied) {
+      if (unit.type === 'infantry') {
+        actions.push(done => reinforceAlliedInfantry(u, done));
+      } else {
+        actions.push(done => reinforceAlliedCavalry(u, done));
+      }
+    } else {
+      // Prussian
+      if (unit.type === 'infantry') {
+        actions.push(done => reinforcePrussianInfantry(u, prTarget, done));
+      } else {
+        actions.push(done => reinforcePrussianCavalry(u, prTarget, done));
+      }
+    }
+  }
+
+  if (actions.length === 0) {
+    addCombatLog('[AI] Reinforce/Recapture: 対象ユニットなし');
+    onDone();
+    return;
+  }
+  executeActionsSequentially(actions, onDone);
+}
+
+// ============================================================
+// Napoleon（Le Petit Caporal Table）
+// ============================================================
+
+/** Napoleon Conditions パネル（Vive / Pas de Charge 状態）を更新 */
+function renderNapoleonConditions() {
+  const el = document.getElementById('napoleon-conditions');
+  if (!el) return;
+  const flags = [];
+  if (pasDeChargeActive) flags.push({ label: 'Pas de Charge! （MA+1）', color: '#5bb5ff' });
+  if (viveBoostUnitId)   flags.push({ label: `Vive L'Emp! → ${viveBoostUnitId}`, color: '#ffd700' });
+  el.innerHTML = '';
+  if (flags.length === 0) {
+    el.innerHTML = '<div style="color:#555;font-size:11px;padding:2px 0">— なし —</div>';
+  } else {
+    for (const f of flags) {
+      const div = document.createElement('div');
+      div.style.cssText = `color:${f.color};font-size:11px;padding:2px 0;font-weight:bold`;
+      div.textContent = `⚔ ${f.label}`;
+      el.appendChild(div);
+    }
+  }
+}
+
+/** Napoleon モード入口：marker消費済みで interactive モードを開始 */
+function enterNapoleonInteractiveMode(key) {
+  napoleonMode = key;
+  napoleonTargetAddrs.clear();
+
+  const banner = document.getElementById('napoleon-mode-banner');
+  const actEl  = document.getElementById('hud-actions');
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-neutral';
+  cancelBtn.textContent = 'キャンセル（ESC）';
+  cancelBtn.style.marginTop = '4px';
+  cancelBtn.addEventListener('click', cancelNapoleonMode);
+
+  if (actEl) { actEl.innerHTML = ''; actEl.appendChild(cancelBtn); }
+
+  switch (key) {
+    case 'sun-austerlitz':
+      banner.textContent = '☀️ Sun of Austerlitz: Rally中心hexをクリック（ESCでキャンセル）';
+      banner.classList.add('active');
+      // 全hexを対象（フランスユニットが存在する or 隣接するhex）
+      for (const [addr] of hexEls) {
+        const hasFr = getUnitsAt(addr).some(u => u.army === 'french') ||
+                      neighborAddrs(addr).some(n => getUnitsAt(n).some(u => u.army === 'french'));
+        if (hasFr) napoleonTargetAddrs.add(addr);
+      }
+      setHudState('☀️ Sun of Austerlitz: Rally中心hexをクリック');
+      break;
+
+    case 'vive-lempereur':
+      banner.textContent = "👑 Vive L'Empereur: ER+2を受けるユニットをクリック（ESCでキャンセル）";
+      banner.classList.add('active');
+      // 全ユニットのhexをハイライト
+      for (const u of units) napoleonTargetAddrs.add(hexAddr(u.col, u.row));
+      setHudState("👑 Vive L'Empereur: ER+2を受けるユニットをクリック");
+      break;
+
+    case 'grand-battery':
+      banner.textContent = '💥 Grand Battery: Heavy Artilleryのhexをクリック（ESCでキャンセル）';
+      banner.classList.add('active');
+      // Heavy Artillery フランスユニットのhexをハイライト
+      for (const u of units.filter(u2 => u2.army === 'french' && u2.isHeavyArtillery)) {
+        napoleonTargetAddrs.add(hexAddr(u.col, u.row));
+      }
+      if (napoleonTargetAddrs.size === 0) {
+        addCombatLog('[Napoleon] Grand Battery: Heavy Artilleryユニットがありません');
+        cancelNapoleonMode();
+        return;
+      }
+      setHudState('💥 Grand Battery: Heavy Artilleryのhexをクリック');
+      break;
+  }
+  refreshHighlights();
+}
+
+/** Napoleon モードをキャンセル（ESCまたはキャンセルボタン） */
+function cancelNapoleonMode() {
+  napoleonMode    = null;
+  napoleonModeIdx = -1;
+  napoleonTargetAddrs.clear();
+  document.getElementById('napoleon-mode-banner').classList.remove('active');
+  refreshHighlights();
+  setHudState('待機中');
+  const actEl = document.getElementById('hud-actions');
+  if (actEl) actEl.innerHTML = '';
+}
+
+/** Napoleon モードのhexクリック処理 */
+function handleNapoleonModeClick(h) {
+  if (!napoleonMode) return;
+
+  switch (napoleonMode) {
+    case 'sun-austerlitz': {
+      cancelNapoleonMode();
+      executeSunAusterlitz(h.addr);
+      break;
+    }
+    case 'vive-lempereur': {
+      const target = getUnitsAt(h.addr)[0];
+      if (!target) { addCombatLog('[Napoleon] Vive: ユニットが見つかりません'); return; }
+      cancelNapoleonMode();
+      executeViveLempereur(target);
+      break;
+    }
+    case 'grand-battery': {
+      const haUnits = getUnitsAt(h.addr).filter(u => u.army === 'french' && u.isHeavyArtillery);
+      if (haUnits.length === 0) { addCombatLog('[Napoleon] Grand Battery: HA unitがありません'); return; }
+      cancelNapoleonMode();
+      executeGrandBattery(haUnits);
+      break;
+    }
+  }
+}
+
+// ---- アクション: Pas de Charge! ----
+function executeNapoleonPasDeCharge() {
+  pasDeChargeActive = true;
+  addCombatLog('[Napoleon] Pas de Charge! フランスユニット MA+1（次のアクション中有効）');
+  const banner = document.getElementById('napoleon-mode-banner');
+  banner.textContent = '⚔️ Pas de Charge! アクティブ — MA+1 & 追加アクション可';
+  banner.classList.add('active');
+
+  const actEl = document.getElementById('hud-actions');
+  if (actEl) {
+    actEl.innerHTML = '';
+    const endBtn = document.createElement('button');
+    endBtn.className = 'btn btn-primary';
+    endBtn.textContent = 'Pas de Charge 終了';
+    endBtn.style.marginTop = '4px';
+    endBtn.addEventListener('click', endPasDeCharge);
+    actEl.appendChild(endBtn);
+  }
+  renderNapoleonConditions();
+  setHudState('⚔️ Pas de Charge! アクティブ（MA+1、追加アクション可）');
+}
+
+function endPasDeCharge() {
+  pasDeChargeActive = false;
+  document.getElementById('napoleon-mode-banner').classList.remove('active');
+  const actEl = document.getElementById('hud-actions');
+  if (actEl) actEl.innerHTML = '';
+  renderNapoleonConditions();
+  setHudState('待機中');
+  addCombatLog('[Napoleon] Pas de Charge 終了');
+}
+
+// ---- アクション: Sun of Austerlitz! ----
+function executeSunAusterlitz(centerAddr) {
+  // centerのユニット＋隣接のフランスユニットで、敵非隣接のものを最大3体Special Rally
+  const candidates = [centerAddr, ...neighborAddrs(centerAddr)]
+    .flatMap(a => getUnitsAt(a).filter(u => u.army === 'french'))
+    .filter(u => !isEnemyAdjacentTo(hexAddr(u.col, u.row), 'french'));
+
+  // 重複除去
+  const seen = new Set();
+  const unique = candidates.filter(u => { if (seen.has(u.id)) return false; seen.add(u.id); return true; });
+  const targets = unique.slice(0, 3);
+
+  if (targets.length === 0) {
+    addCombatLog('[Napoleon] Sun of Austerlitz: 対象ユニットなし（敵隣接のため除外）');
+    return;
+  }
+  for (const u of targets) {
+    u.hits = 0;
+    addCombatLog(`[Napoleon] Sun of Austerlitz: ${u.id} Special Rally（hits→0）`);
+  }
+  drawAllUnits();
+}
+
+// ---- アクション: Vive L'Empereur! ----
+function executeViveLempereur(target) {
+  viveBoostUnitId = target.id;
+  addCombatLog(`[Napoleon] Vive L'Empereur! ${target.id} の次のElan/Panic Test ER+2`);
+  drawAllUnits(); // show crown icon
+  renderNapoleonConditions();
+}
+
+// ---- アクション: Beautiful Daughters Grand Battery! ----
+function executeGrandBattery(haUnits) {
+  if (haUnits.length === 0) { addCombatLog('[Napoleon] Grand Battery: HAユニットなし'); return; }
+  // 各HA unitが砲撃できるターゲットを選んで順次解決
+  const actions = haUnits.map(u => done => {
+    const targets = getValidBombardmentTargets(u);
+    if (targets.length === 0) {
+      addCombatLog(`[Napoleon] Grand Battery: ${u.id} 有効ターゲットなし`);
+      done();
+      return;
+    }
+    const attackerAddr = hexAddr(u.col, u.row);
+    const target = getEnemyTargetPriority(targets, attackerAddr)[0];
+    // Grand Battery の場合プレイヤーが目標を選ぶのが本来だが
+    // 自動で最優先ターゲットを選ぶ（プレイヤーは手動で選択可）
+    setAIHighlights(attackerAddr, hexAddr(target.col, target.row));
+    resolveBombardment(u, target, {
+      onComplete: () => {
+        clearAIHighlights();
+        drawAllUnits();
+        done();
+      },
+    });
+  });
+  addCombatLog(`[Napoleon] Grand Battery: ${haUnits.map(u => u.id).join('、')} が砲撃`);
+  executeActionsSequentially(actions, () => {
+    addCombatLog('[Napoleon] Grand Battery 完了');
+  });
+}
+
+// ---- アクション: The Bearskins! ----
+function executeNapoleonBearskins() {
+  // OGユニット（isOG: true、Battlewornでない）に隣接する全敵ユニットがElan Test
+  const ogUnits = units.filter(u => u.isOG && !u.battleworn && u.army === 'french');
+  if (ogUnits.length === 0) {
+    addCombatLog('[Napoleon] Bearskins: OG（非Battleworn）ユニットなし');
+    return;
+  }
+
+  const actions = [];
+  const tested = new Set(); // 同一ユニットを重複テストしない
+
+  for (const og of ogUnits) {
+    const ogAddr = hexAddr(og.col, og.row);
+    const adjEnemies = neighborAddrs(ogAddr)
+      .flatMap(n => getUnitsAt(n).filter(e =>
+        e.army !== 'french' && !e.isDetachment && !tested.has(e.id)));
+    for (const enemy of adjEnemies) {
+      tested.add(enemy.id);
+      const e = enemy;
+      actions.push(done => {
+        const result = performElanTest(e);
+        const rollStr = result.reroll !== null ? `${result.roll}→再:${result.reroll}` : `${result.roll}`;
+        const outcome = result.success ? '成功（後退なし）' : '失敗（1hex後退）';
+        addCombatLog(`[Napoleon Bearskins] ${e.id} Elan ER=${result.er} ⚄${rollStr} → ${outcome}`);
+        if (!result.success) {
+          const msgs = doRetreat(e, 1);
+          msgs.forEach(m => addCombatLog(`[Bearskins] ${m}`));
+          drawAllUnits();
+        }
+        done();
+      });
+    }
+  }
+
+  if (actions.length === 0) {
+    addCombatLog('[Napoleon] Bearskins: OG隣接の敵ユニットなし');
+    return;
+  }
+  addCombatLog(`[Napoleon] Bearskins: ${actions.length}ユニットがElan Test`);
+  executeActionsSequentially(actions, () => {
+    drawAllUnits();
+    addCombatLog('[Napoleon] Bearskins 完了');
+  });
+}
+
+// ---- Napoleon アクション ディスパッチャー ----
+function executeNapoleonAction(idx, key) {
+  const r = cps.useNapoleon(idx, key);
+  if (!r.ok) { alert(r.error); return; }
+  renderChitUI(cps.getState());
+
+  switch (key) {
+    case 'pas-de-charge':
+      executeNapoleonPasDeCharge();
+      break;
+    case 'bearskins':
+      executeNapoleonBearskins();
+      break;
+    case 'sun-austerlitz':
+    case 'vive-lempereur':
+    case 'grand-battery':
+      napoleonModeIdx = idx; // already consumed, just for reference
+      enterNapoleonInteractiveMode(key);
+      break;
+    default:
+      addCombatLog(`[Napoleon] 不明なキー: ${key}`);
+  }
+}
+
+// ============================================================
+// Wellington（Old Nosey Table）
+// ============================================================
+
+function resolveWellington(marker, onDone) {
+  setHudState('[Wellington] Old Nosey Table 処理中...');
+
+  // Step 1: Auto Rally（最多Hit、同数ならER最高）
+  const rallyTargets = units.filter(u => u.army === 'allied' && !u.isDetachment && (u.hits ?? 0) > 0);
+  if (rallyTargets.length > 0) {
+    const target = rallyTargets.sort((a, b) => {
+      if ((b.hits || 0) !== (a.hits || 0)) return (b.hits || 0) - (a.hits || 0);
+      return getEffectiveER(b) - getEffectiveER(a);
+    })[0];
+    addCombatLog(`[Wellington] Step1 Rally: ${target.id}（hits=${target.hits}）`);
+    doRally(target);
+  } else {
+    addCombatLog('[Wellington] Step1 Rally: Hit持ちユニットなし');
+  }
+
+  // Step 2: ロール＆実行
+  const preamble = rallyTargets.length > 0
+    ? `① ${rallyTargets.sort((a,b)=>(b.hits||0)-(a.hits||0))[0]?.id} を Rally 済み\n② 以下のテーブルをロール：`
+    : '① Rally対象なし\n② 以下のテーブルをロール：';
+  openRollModal(marker, WELLINGTON_TABLE, onDone, preamble,
+    (key, done) => executeWellingtonResult(key, done));
+}
+
+function executeWellingtonResult(key, onDone) {
+  switch (key) {
+    case 'reverse-slope':
+      reverseSlope = true;
+      addCombatLog('[Wellington] Reverse Slope Deployment: このターン、Ridge連合軍へのBombardment TN=5');
+      renderConditionsPanel();
+      onDone();
+      break;
+
+    case 'thin-red-line':
+      thinRedLine = true;
+      addCombatLog('[Wellington] The Thin Red Line: British Infantry SP/ER+1（このターン）');
+      renderConditionsPanel();
+      drawAllUnits();
+      onDone();
+      break;
+
+    case 'maitland': {
+      // フランスユニットに隣接するBritish Infantry/Cavalry（Detachment除く）が攻撃
+      const eligible = units.filter(u =>
+        u.army === 'allied' && !u.isDetachment && isBritish(u) &&
+        (u.type === 'infantry' || u.type === 'HC' || u.type === 'LC') &&
+        neighborAddrs(hexAddr(u.col, u.row)).some(n =>
+          getUnitsAt(n).some(f => f.army === 'french'))
+      );
+      if (eligible.length === 0) {
+        addCombatLog('[Wellington] Now Maitland: 対象ユニットなし（隣接フランスなし）');
+        onDone();
+        return;
+      }
+      addCombatLog(`[Wellington] Now Maitland: ${eligible.length}ユニットが攻撃（Close to Contact成功で+2ダイス）`);
+      const actions = eligible.map(unit => done => {
+        const frAddr = hexAddr(unit.col, unit.row);
+        const frTargets = neighborAddrs(frAddr).flatMap(n => getUnitsAt(n).filter(f => f.army === 'french'));
+        if (frTargets.length === 0) { done(); return; }
+        const target = frTargets[0];
+        aiResolveCloseCombat(unit, target, done, 2);
+      });
+      executeActionsSequentially(actions, onDone);
+      break;
+    }
+
+    case 'scum':
+      scumOfTheEarth = true;
+      addCombatLog('[Wellington] Scum of the Earth: British Infantry ER-1（このターン）');
+      renderConditionsPanel();
+      drawAllUnits();
+      onDone();
+      break;
+
+    case 'bad-day':
+      resolveBadDayForNapoleon();
+      onDone();
+      break;
+
+    default:
+      addCombatLog(`[Wellington] 不明なキー: ${key}`);
+      onDone();
+  }
+}
+
+// ============================================================
+// Blücher（Alte Vorwarts Table）
+// ============================================================
+
+function resolveBlucher(marker, onDone) {
+  setHudState('[Blücher] Alte Vorwarts Table 処理中...');
+
+  // Step 1: TRTマーカー前進
+  const deployed = cps.advanceTRTMarkers();
+  for (const m of deployed) {
+    addCombatLog(`[Blücher] ${m.label}（${m.sub}）展開！`);
+    deployPrussianCorps(m);
+  }
+  renderChitUI(cps.getState());
+
+  // Step 2: Auto Rally（最多Hit、同数ならER最高）
+  const prussianHit = units.filter(u => u.army === 'prussian' && (u.hits ?? 0) > 0);
+  if (prussianHit.length > 0) {
+    const target = prussianHit.sort((a, b) => {
+      if ((b.hits || 0) !== (a.hits || 0)) return (b.hits || 0) - (a.hits || 0);
+      return getEffectiveER(b) - getEffectiveER(a);
+    })[0];
+    addCombatLog(`[Blücher] Step2 Rally: ${target.id}（hits=${target.hits}）`);
+    doRally(target);
+  } else {
+    addCombatLog('[Blücher] Step2 Rally: Hit持ちプロイセンユニットなし');
+  }
+
+  // Step 3: ロール＆実行
+  const trtState = cps.getState().trtMarkers;
+  const trtInfo  = trtState.length > 0
+    ? trtState.map(m => `${m.label}→T${m.trtTurn}`).join('、')
+    : '全コープス展開済み';
+  const preamble = `① TRT前進完了（${trtInfo}）\n② Rally済み\n③ 以下のテーブルをロール：`;
+  openRollModal(marker, BLUCHER_TABLE, onDone, preamble,
+    (key, done) => executeBlucherResult(key, done));
+}
+
+function executeBlucherResult(key, onDone) {
+  const prussianUnits = units.filter(u => u.army === 'prussian');
+
+  switch (key) {
+    case 'revenge': {
+      // 隣接Prussian Infantry → +1ER Close to Contact Test で近接攻撃
+      // 2hex以内Prussian Cavalry → +1ER で突撃
+      // その他 → 最近フランスに砲撃（不可なら1hex接近）
+      const actions = prussianUnits.map(unit => done => {
+        const unitAddr = hexAddr(unit.col, unit.row);
+        const french = getFrenchUnits();
+        if (french.length === 0) { done(); return; }
+
+        if (unit.type === 'infantry') {
+          const adjFrench = neighborAddrs(unitAddr).flatMap(n =>
+            getUnitsAt(n).filter(f => f.army === 'french'));
+          if (adjFrench.length > 0) {
+            // +1ER boost for Close to Contact: pass as bonusDice or handle inline
+            addCombatLog(`[Blücher Revenge] ${unit.id} → 近接攻撃（+1ER CtC）`);
+            aiResolveCloseCombat(unit, adjFrench[0], done);
+          } else {
+            const targets = getValidBombardmentTargets(unit);
+            if (targets.length > 0) {
+              aiResolveBombardmentStep(unit, targets[0], done);
+            } else {
+              const nearest = getEnemyTargetPriority(french, unitAddr)[0];
+              const moved = moveTowardTarget(unit, hexAddr(nearest.col, nearest.row), 0);
+              addCombatLog(`[Blücher Revenge] ${unit.id} 接近 → ${moved || '移動不可'}`);
+              drawAllUnits();
+              done();
+            }
+          }
+        } else if (unit.type === 'HC' || unit.type === 'LC') {
+          const nearest = getEnemyTargetPriority(french, unitAddr)[0];
+          const dist    = hexDistance(unitAddr, hexAddr(nearest.col, nearest.row));
+          if (dist <= 2 && isCavalryChargeEligible(unit, nearest)) {
+            addCombatLog(`[Blücher Revenge] ${unit.id} → 突撃（+1ER CtC）`);
+            aiResolveCloseCombat(unit, nearest, done);
+          } else {
+            const targets = getValidBombardmentTargets(unit);
+            if (targets.length > 0) {
+              aiResolveBombardmentStep(unit, targets[0], done);
+            } else {
+              const moved = moveTowardTarget(unit, hexAddr(nearest.col, nearest.row), 0);
+              addCombatLog(`[Blücher Revenge] ${unit.id} 接近 → ${moved || '移動不可'}`);
+              drawAllUnits();
+              done();
+            }
+          }
+        } else { // artillery
+          const targets = getValidBombardmentTargets(unit);
+          if (targets.length > 0) {
+            aiResolveBombardmentStep(unit, targets[0], done);
+          } else {
+            const nearest = getEnemyTargetPriority(french, unitAddr)[0];
+            const moved = moveTowardTarget(unit, hexAddr(nearest.col, nearest.row), 0);
+            addCombatLog(`[Blücher Revenge] ${unit.id} 接近 → ${moved || '移動不可'}`);
+            drawAllUnits();
+            done();
+          }
+        }
+      });
+      if (actions.length === 0) { addCombatLog('[Blücher] Revenge: プロイセンユニットなし'); onDone(); return; }
+      executeActionsSequentially(actions, onDone);
+      break;
+    }
+
+    case 'forward': {
+      // 全Prussianが最近フランスに接近、隣接中は砲撃。TRTをロール。
+      const actions = prussianUnits.map(unit => done => {
+        const unitAddr = hexAddr(unit.col, unit.row);
+        const french = getFrenchUnits();
+        if (french.length === 0) { done(); return; }
+        const nearest = getEnemyTargetPriority(french, unitAddr)[0];
+        const tAddr   = hexAddr(nearest.col, nearest.row);
+        const dist    = hexDistance(unitAddr, tAddr);
+        if (dist === 1) {
+          const targets = getValidBombardmentTargets(unit);
+          if (targets.length > 0) aiResolveBombardmentStep(unit, targets[0], done);
+          else { addCombatLog(`[Blücher Forward] ${unit.id}: 砲撃不可・待機`); done(); }
+        } else {
+          const moved = moveTowardTarget(unit, tAddr, 0);
+          addCombatLog(`[Blücher Forward] ${unit.id} 接近 → ${moved || '移動不可'}`);
+          if (moved) setAIHighlights(unitAddr, moved);
+          drawAllUnits();
+          setTimeout(() => { clearAIHighlights(); done(); }, 300);
+        }
+      });
+      // TRTロール
+      const trtResults = cps.rollTRTForward();
+      for (const r of trtResults) {
+        const delta = r.d === 1 ? '遅延' : (r.d <= 3 ? '変化なし' : '前進');
+        addCombatLog(`[Blücher Forward] TRT ${r.label}: ⚄${r.d} → ${delta}（T${r.trtTurn}）`);
+      }
+      renderChitUI(cps.getState());
+      if (actions.length === 0) { onDone(); return; }
+      executeActionsSequentially(actions, onDone);
+      break;
+    }
+
+    case 'ligny': {
+      // I/II Corps隣接PrussianがI/II Corps非BattlewornフランスにElan Test、失敗で後退
+      const lignyFrench = units.filter(u =>
+        u.army === 'french' && !u.battleworn &&
+        (u.id.endsWith('_I') || u.id.endsWith('_II'))
+      );
+      const actions = [];
+      for (const french of lignyFrench) {
+        const fAddr = hexAddr(french.col, french.row);
+        const adjPrussian = neighborAddrs(fAddr).flatMap(n =>
+          getUnitsAt(n).filter(p => p.army === 'prussian'));
+        if (adjPrussian.length === 0) continue;
+        actions.push(done => {
+          const result = performElanTest(french);
+          const outcome = result.success ? '成功（後退なし）' : '失敗（1hex後退）';
+          addCombatLog(`[Blücher Ligny] ${french.id} Elan Test: ⚄${result.roll} / ER${result.er} → ${outcome}`);
+          if (!result.success) {
+            const msgs = doRetreat(french, 1);
+            msgs.forEach(m => addCombatLog(`[Blücher Ligny] ${m}`));
+            drawAllUnits();
+          }
+          done();
+        });
+      }
+      if (actions.length === 0) { addCombatLog('[Blücher] Ligny: 対象ユニットなし'); onDone(); return; }
+      executeActionsSequentially(actions, onDone);
+      break;
+    }
+
+    case 'bad-day':
+      resolveBadDayForNapoleon();
+      onDone();
+      break;
+
+    default:
+      addCombatLog(`[Blücher] 不明なキー: ${key}`);
+      onDone();
+  }
+}
+
+/** プロイセンコープスを展開（ユニット未実装のためログのみ） */
+function deployPrussianCorps(marker) {
+  prussianDeployed = true;
+  addCombatLog(`[展開] ${marker.label}（${marker.sub}）がマップ上に到着！（ユニット配置は手動）`);
+  setHudState(`[展開] ${marker.label} 到着`);
+}
+
+/** Allied Conditions パネルを更新 */
+function renderConditionsPanel() {
+  const el = document.getElementById('allied-conditions');
+  if (!el) return;
+  const flags = [];
+  if (reverseSlope)    flags.push({ label: 'Reverse Slope', color: '#4af' });
+  if (thinRedLine)     flags.push({ label: 'Thin Red Line', color: '#f84' });
+  if (scumOfTheEarth)  flags.push({ label: 'Scum of the Earth', color: '#a66' });
+  el.innerHTML = '';
+  if (flags.length === 0) {
+    el.innerHTML = '<div style="color:#555;font-size:11px;padding:2px 0">— なし —</div>';
+  } else {
+    for (const f of flags) {
+      const div = document.createElement('div');
+      div.style.cssText = `color:${f.color};font-size:11px;padding:2px 0;font-weight:bold`;
+      div.textContent = `✦ ${f.label}`;
+      el.appendChild(div);
+    }
+  }
+}
+
+// ============================================================
+// フランスコントロール管理
+// ============================================================
+
+/** VPヘックスのフランスコントロールマーカーをSVGに描画 */
+function renderVPControlLayer() {
+  if (!vpControlLayerEl) return;
+  vpControlLayerEl.innerHTML = '';
+  for (const addr of frenchControlHexes) {
+    const col = parseInt(addr.slice(0, 2), 10);
+    const row = parseInt(addr.slice(2), 10);
+    const { x, y } = layout.hexToPixel(toIdx(col), toIdx(row));
+    // 赤い小さな星形マーカー
+    const star = makeSVGEl('text', {
+      x, y: y + 5,
+      'text-anchor': 'middle',
+      'font-size': '22',
+      fill: '#e03030',
+      opacity: '0.85',
+      'pointer-events': 'none',
+    });
+    star.textContent = '★';
+    vpControlLayerEl.appendChild(star);
+  }
+}
+
+/** VPヘックスをフランスコントロールに設定 */
+function setFrenchControl(addr) {
+  if (!ALL_VP_ADDRS.has(addr)) return;
+  if (frenchControlHexes.has(addr)) return;
+  frenchControlHexes.add(addr);
+  renderVPControlLayer();
+}
+
+/** VPヘックスのフランスコントロールを解除 */
+function clearFrenchControl(addr) {
+  if (!frenchControlHexes.has(addr)) return;
+  frenchControlHexes.delete(addr);
+  renderVPControlLayer();
+}
+
+// ---- メインディスパッチャー ----
+
+/**
+ * Anglo-Allied / Prussian コープスの AI 判定を実行する。
+ * @param {object} marker - ChitPullSystem の marker オブジェクト
+ * @param {string} tableKey - ALLIED_PRUSSIAN_TABLE のキー
+ * @param {function} onDone - 全処理完了後のコールバック
+ */
+function runAlliedPrussianAI(marker, tableKey, onDone) {
+  const corpUnits = getCorpsUnits(marker);
+  setHudState(`[AI] ${marker.label}（${marker.sub}）アクティベーション中...`);
+
+  switch (tableKey) {
+    case 'fire-nearest':
+      resolveOpenFireNearest(corpUnits, onDone);
+      break;
+    case 'fire-largest':
+      resolveOpenFireLargest(corpUnits, onDone);
+      break;
+    case 'rally':
+      resolveRallyAroundColors(corpUnits, onDone);
+      break;
+    case 'bad-day':
+      resolveBadDayForNapoleon();
+      onDone();
+      break;
+    case 'advance':
+      resolveAdvance(corpUnits, marker, onDone);
+      break;
+    case 'reinforce':
+      resolveReinforceRecapture(corpUnits, marker, onDone);
+      break;
+    default:
+      addCombatLog(`[AI] 不明なキー: ${tableKey}`);
+      onDone();
+  }
 }
 
 // ============================================================
@@ -2447,9 +4043,12 @@ window.addEventListener('mouseup', () => {
 // 右クリックメニュー抑制
 viewport.addEventListener('contextmenu', e => e.preventDefault());
 
-// Escで選択解除
+// Escで選択解除 / Napoleon modeキャンセル
 window.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && selectedUnitId !== null) deselect();
+  if (e.key === 'Escape') {
+    if (napoleonMode) cancelNapoleonMode();
+    else if (selectedUnitId !== null) deselect();
+  }
 });
 
 // ============================================================
@@ -2661,10 +4260,9 @@ function renderDrawnCard(el, m) {
     case 'allied':
     case 'prussian': {
       const btnRoll = makeBtn('ロール＆アクティベート', 'btn-danger', () => {
-        openRollModal(m, ALLIED_PRUSSIAN_TABLE, () => {
-          cps.resolveDrawn();
-          renderChitUI(cps.getState());
-        });
+        const onDone = () => { cps.resolveDrawn(); renderChitUI(cps.getState()); };
+        openRollModal(m, ALLIED_PRUSSIAN_TABLE, onDone, '',
+          (key, done) => runAlliedPrussianAI(m, key, done));
       });
       actions.appendChild(btnRoll);
       break;
@@ -2672,10 +4270,8 @@ function renderDrawnCard(el, m) {
 
     case 'wellington': {
       const btnRoll = makeBtn('Old Nosey Table', 'btn-danger', () => {
-        openRollModal(m, WELLINGTON_TABLE, () => {
-          cps.resolveDrawn();
-          renderChitUI(cps.getState());
-        }, wellingtonPreamble());
+        const onDone = () => { cps.resolveDrawn(); renderChitUI(cps.getState()); };
+        resolveWellington(m, onDone);
       });
       actions.appendChild(btnRoll);
       break;
@@ -2683,10 +4279,8 @@ function renderDrawnCard(el, m) {
 
     case 'blucher': {
       const btnRoll = makeBtn('Alte Vorwarts Table', 'btn-neutral', () => {
-        openRollModal(m, BLUCHER_TABLE, () => {
-          cps.resolveDrawn();
-          renderChitUI(cps.getState());
-        }, blucherPreamble());
+        const onDone = () => { cps.resolveDrawn(); renderChitUI(cps.getState()); };
+        resolveBlucher(m, onDone);
       });
       actions.appendChild(btnRoll);
       break;
@@ -2698,24 +4292,13 @@ function renderDrawnCard(el, m) {
   }
 }
 
+// 以下のpreamble関数は resolveWellington/resolveBlucher 内で生成するため未使用
+// （後方互換のため残す）
 function wellingtonPreamble() {
-  return '① 最多HitのAnglo-Allied（Detachment除く）ユニットをRally（同数ならER最高、さらに同数ならプレイヤー選択）\n② 以下のテーブルをロール：';
+  return '① 最多HitのAnglo-Allied（Detachment除く）ユニットをRally\n② 以下のテーブルをロール：';
 }
-
 function blucherPreamble() {
-  const trt = cps.getState().trtMarkers;
-  let txt = '① TRT上の全Prussian Activation Markerを1マス前進\n';
-  txt += '② 最多HitのPrussianユニットをRally\n';
-  txt += '③ 以下のテーブルをロール：';
-  if (trt.length > 0) {
-    const names = trt.map(m => m.label).join('、');
-    txt = `① TRT上の ${names} を1マス前進（ターン${trt[0]?.trtTurn}→${trt[0]?.trtTurn - 1 > 0 ? trt[0].trtTurn - 1 : '即時'}）\n② 最多HitのPrussianユニットをRally\n③ 以下のテーブルをロール：`;
-    // 実際にTRTを1マス前進
-    for (const m of trt) {
-      m.trtTurn = Math.max(cps.turn + 1, m.trtTurn - 1);
-    }
-  }
-  return txt;
+  return '① TRTマーカー前進\n② 最多HitのPrussianユニットをRally\n③ 以下のテーブルをロール：';
 }
 
 // ---- 保持中マーカーカード ----
@@ -2745,7 +4328,8 @@ function makeBtn(text, cls, onClick) {
 // ---- ダイスロールモーダル ----
 let _rollResolve = null;
 
-function openRollModal(marker, table, onResolve, preamble = '') {
+// onAIExec(key, done): AIが実行するコールバック（allied/prussian/wellington/blücher用）
+function openRollModal(marker, table, onResolve, preamble = '', onAIExec = null) {
   const { total, d1, d2 } = roll2d6();
   const result = lookupTable(table, total);
 
@@ -2763,6 +4347,21 @@ function openRollModal(marker, table, onResolve, preamble = '') {
   }
 
   _rollResolve = onResolve;
+
+  const btnAI = document.getElementById('btn-roll-ai-exec');
+  if (onAIExec && result) {
+    btnAI.style.display = '';
+    btnAI.onclick = () => {
+      document.getElementById('roll-modal').classList.add('hidden');
+      onAIExec(result.key, () => {
+        if (_rollResolve) { _rollResolve(); _rollResolve = null; }
+      });
+    };
+  } else {
+    btnAI.style.display = 'none';
+    btnAI.onclick = null;
+  }
+
   document.getElementById('roll-modal').classList.remove('hidden');
 }
 
@@ -2790,10 +4389,8 @@ function openNapoleonModal(idx) {
     div.innerHTML = `<div class="nopt-title">${opt.title}</div>`
                   + `<div class="nopt-desc">${opt.desc}</div>`;
     div.addEventListener('click', () => {
-      const r = cps.useNapoleon(_napoleonIdx, opt.key);
-      if (!r.ok) { alert(r.error); return; }
       document.getElementById('napoleon-modal').classList.add('hidden');
-      renderChitUI(cps.getState());
+      executeNapoleonAction(_napoleonIdx, opt.key);
     });
     list.appendChild(div);
   }
@@ -2819,6 +4416,17 @@ elBtnEndTurn.addEventListener('click', () => {
     alert('現在のマーカーを先に解決してください');
     return;
   }
+  // Allied Condition Flags をリセット
+  reverseSlope   = false;
+  thinRedLine    = false;
+  scumOfTheEarth = false;
+  renderConditionsPanel();
+  // Napoleon Action State をリセット
+  if (napoleonMode) cancelNapoleonMode();
+  pasDeChargeActive = false;
+  viveBoostUnitId   = null;
+  renderNapoleonConditions();
+  drawAllUnits();
   const r = cps.endTurn();
   renderChitUI(cps.getState());
   if (r.gameOver) {
@@ -2831,6 +4439,8 @@ cps.on(renderChitUI);
 
 // ---- 初期描画 ----
 renderChitUI(cps.getState());
+renderConditionsPanel();
+renderNapoleonConditions();
 
 // ============================================================
 // 地形編集 — チェックボックスUI

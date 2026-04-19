@@ -213,12 +213,65 @@ function getEffectiveSP(unit) {
 }
 
 // ============================================================
+// Elan Test / Panic Test / Rally（DOM副作用なし版）
+// ============================================================
+
+/**
+ * Elan Test。fixedRoll が指定されていればダイスの代わりに使う（テスト用）。
+ * ER=6 で 6 が出た場合は fixedReroll（省略時も fixedRoll）を再ロールとして使う。
+ */
+function performElanTest(unit, fixedRoll = null, fixedReroll = null) {
+  const er = getEffectiveER(unit);
+  const roll = fixedRoll !== null ? fixedRoll : rollD6();
+  if (er >= 6 && roll === 6) {
+    const reroll = fixedReroll !== null ? fixedReroll : rollD6();
+    return { roll, reroll, success: reroll <= 3, er };
+  }
+  return { roll, reroll: null, success: roll <= er, er };
+}
+
+/**
+ * Panic Test（DOM副作用なし版）。
+ * fixedRoll を渡すとダイス目を固定できる（テスト用）。
+ * @returns {string[]} ログ
+ */
+function runPanicTest(unit, fixedRoll = null) {
+  const logs = [];
+  if (unit.isDetachment) {
+    logs.push(`[${unit.id}] Panic Test（Detachment）→ 後退なし・追加1Hit`);
+    applyHit(unit);
+    return logs;
+  }
+  const { roll, reroll, success, er } = performElanTest(unit, fixedRoll);
+  const rollStr = reroll !== null ? `${roll}→再:${reroll}` : `${roll}`;
+  logs.push(`[${unit.id}] Panic Test ER=${er} ダイス:${rollStr} → ${success ? '成功' : '失敗'}`);
+  if (!success) {
+    const retreatLogs = doRetreat(unit, 1);
+    retreatLogs.forEach(m => logs.push(m));
+  }
+  return logs;
+}
+
+/**
+ * Rally（DOM副作用なし版）。
+ * hits を1段階回復。Battleworn 面からの Fresh 回復は不可。
+ */
+function doRally(unit) {
+  if ((unit.hits ?? 0) <= 0) return;
+  unit.hits = Math.max(0, (unit.hits ?? 0) - 1);
+}
+
+// ============================================================
 // applyHit（DOM副作用なし版）
 // ============================================================
 function applyHit(unit) {
   if (!unit.battleworn) {
     unit.hits = (unit.hits??0) + 1;
-    if (unit.hits >= 3) { unit.battleworn = true; unit.hits = 0; }
+    if (unit.hits >= 3) {
+      unit.battleworn = true;
+      unit.hits = 0;
+      runPanicTest(unit); // Panic Test 自動実行（fixedRoll なし = ランダム）
+    }
   } else {
     unit.hits = (unit.hits??0) + 1;
   }
@@ -270,6 +323,69 @@ function getValidBombardmentTargets(attackerUnit) {
     if (dist < 1 || dist > range) return false;
     return calcLOS(attackerAddr, targetAddr);
   });
+}
+
+// ============================================================
+// 敵AI判定ヘルパー（index.html と同一実装）
+// ============================================================
+
+const BRUSSELS_VP_ADDRS = new Set(['0301','0401','0701','0901','1401']);
+const ALL_VP_ADDRS = new Set([
+  '0301','0401','0701','0901','1401',
+  '0409','0204','0802','1007','0903','0104','1607',
+  '1412','1413','1512','1110','1015',
+]);
+
+function getEnemyTargetPriority(candidates, refAddr = null) {
+  return [...candidates].sort((a, b) => {
+    if (refAddr !== null) {
+      const da = hexDistance(hexAddr(a.col, a.row), refAddr);
+      const db = hexDistance(hexAddr(b.col, b.row), refAddr);
+      if (da !== db) return da - db;
+    }
+    const spDiff = getEffectiveSP(b) - getEffectiveSP(a);
+    if (spDiff !== 0) return spDiff;
+    const erDiff = getEffectiveER(a) - getEffectiveER(b);
+    if (erDiff !== 0) return erDiff;
+    return (b.hits || 0) - (a.hits || 0);
+  });
+}
+
+function selectAIBombardTarget(attacker, validTargets, primarySort = 'nearest') {
+  if (validTargets.length === 0) return null;
+  const attackerAddr = hexAddr(attacker.col, attacker.row);
+  const vpPriority = validTargets.filter(t => {
+    const ta = hexAddr(t.col, t.row);
+    return BRUSSELS_VP_ADDRS.has(ta) || neighborAddrs(ta).some(n => BRUSSELS_VP_ADDRS.has(n));
+  });
+  const pool = vpPriority.length > 0 ? vpPriority : validTargets;
+  const refAddr = primarySort === 'nearest' ? attackerAddr : null;
+  return getEnemyTargetPriority(pool, refAddr)[0] || null;
+}
+
+function getCorpsUnits(marker) {
+  if (marker.type === 'allied') {
+    if (marker.id === 'aa-I')   return units.filter(u => u.army === 'allied' && u.id.endsWith('_I') && !u.isDetachment);
+    if (marker.id === 'aa-II')  return units.filter(u => u.army === 'allied' && u.id.endsWith('_II'));
+    if (marker.id === 'aa-RC')  return units.filter(u => u.army === 'allied' && u.id.endsWith('_RC'));
+    if (marker.id === 'aa-CC')  return units.filter(u => u.army === 'allied' && u.id.endsWith('_CC'));
+    if (marker.id === 'aa-det') return units.filter(u => u.isDetachment);
+  }
+  if (marker.type === 'prussian') return units.filter(u => u.army === 'prussian');
+  return [];
+}
+
+/** Rally Around the Colors のラリー/後退部分のみ（砲撃はスキップ） */
+function resolveRallyAroundColors_syncPart(corpUnits) {
+  for (const unit of corpUnits) {
+    const unitAddr = hexAddr(unit.col, unit.row);
+    if ((unit.hits || 0) > 0) {
+      if (isEnemyAdjacentTo(unitAddr, unit.army)) {
+        doRetreat(unit, 1);
+      }
+      doRally(unit);
+    }
+  }
 }
 
 // ============================================================
@@ -430,6 +546,13 @@ function mkUnit(overrides) {
 
 function reset(...addrs) {
   addrs.forEach(a => terrainData.delete(a));
+  riverHexsides.length = 0;
+  bridgeHexsides.length = 0;
+  units.length = 0;
+}
+
+function fullReset() {
+  terrainData.clear();
   riverHexsides.length = 0;
   bridgeHexsides.length = 0;
   units.length = 0;
@@ -1172,6 +1295,1356 @@ test('④ neighborAddrs は6方向を持つ（内部ヘックス）', () => {
 test('⑤ 中央ヘックス 1008 の全隣接は距離1', () => {
   const ok = neighborAddrs('1008').every(a => hexDistance('1008',a) === 1);
   expect(ok,'all neighbors at dist 1').toBeTrue();
+});
+
+// --------------------------------------------------
+section('Panic Test — runPanicTest');
+// --------------------------------------------------
+
+test('① 成功（ロール=1 ≤ ER=4）→ 後退なし', () => {
+  reset();
+  const unit = mkUnit({ id:'u', col:10, row:8, type:'infantry', army:'french', er:4, hits:0, battleworn:true });
+  units.push(unit);
+  const before = hexAddr(unit.col, unit.row);
+  runPanicTest(unit, 1); // roll=1 → success
+  expect(hexAddr(unit.col, unit.row), 'position').toBe(before);
+});
+
+test('② 失敗（ロール=5 > ER=4）→ 1hex後退', () => {
+  reset();
+  const unit = mkUnit({ id:'u', col:10, row:8, type:'infantry', army:'french', er:4, hits:0, battleworn:true });
+  units.push(unit);
+  const before = hexAddr(unit.col, unit.row);
+  runPanicTest(unit, 5); // roll=5 > ER=4 → fail
+  expect(hexAddr(unit.col, unit.row) !== before, 'moved').toBeTrue();
+});
+
+test('③ ER=6 ロール=6→再ロール=2（≤3）→ 成功・後退なし', () => {
+  reset();
+  const unit = mkUnit({ id:'u', col:10, row:8, type:'infantry', army:'french', er:6, hits:0, battleworn:true });
+  units.push(unit);
+  const before = hexAddr(unit.col, unit.row);
+  runPanicTest(unit, 6); // roll=6 → reroll with rollD6()... need fixedReroll
+  // We call performElanTest directly to control both rolls
+  const result = performElanTest(unit, 6, 2); // reroll=2 ≤ 3 → success
+  expect(result.success, 'success').toBeTrue();
+  expect(result.reroll, 'reroll').toBe(2);
+});
+
+test('④ ER=6 ロール=6→再ロール=5（>3）→ 失敗', () => {
+  reset();
+  const unit = mkUnit({ id:'u', col:10, row:8, type:'infantry', army:'french', er:6, hits:0, battleworn:true });
+  units.push(unit);
+  const result = performElanTest(unit, 6, 5); // reroll=5 > 3 → fail
+  expect(result.success, 'fail').toBeFalse();
+});
+
+test('⑤ Detachment → 後退なし・追加1Hit', () => {
+  reset();
+  const unit = mkUnit({ id:'det', col:10, row:8, type:'infantry', army:'allied',
+                        er:4, hits:0, battleworn:true, isDetachment:true });
+  units.push(unit);
+  const before = hexAddr(unit.col, unit.row);
+  runPanicTest(unit, 5); // roll=5（引数は無視される）
+  expect(hexAddr(unit.col, unit.row), 'position').toBe(before);
+  expect(unit.hits > 0, 'extra hit applied').toBeTrue();
+});
+
+// --------------------------------------------------
+section('Rally — doRally');
+// --------------------------------------------------
+
+test('① Disrupted（hits=2）→ Shaken（hits=1）', () => {
+  const u = mkUnit({ hits:2, battleworn:false });
+  doRally(u);
+  expect(u.hits, 'hits').toBe(1);
+  expect(getUnitStatus(u), 'status').toBe('shaken');
+});
+
+test('② Shaken（hits=1）→ Fresh（hits=0）', () => {
+  const u = mkUnit({ hits:1, battleworn:false });
+  doRally(u);
+  expect(u.hits, 'hits').toBe(0);
+  expect(getUnitStatus(u), 'status').toBe('fresh');
+});
+
+test('③ Battleworn+Shaken（hits=1）→ hits=0、battleworn 維持', () => {
+  const u = mkUnit({ hits:1, battleworn:true });
+  doRally(u);
+  expect(u.hits, 'hits').toBe(0);
+  expect(u.battleworn, 'battleworn').toBeTrue();
+  expect(getUnitStatus(u), 'status').toBe('battleworn');
+});
+
+test('④ Battleworn+Disrupted（hits=2）→ hits=1（Shaken）、battleworn 維持', () => {
+  const u = mkUnit({ hits:2, battleworn:true });
+  doRally(u);
+  expect(u.hits, 'hits').toBe(1);
+  expect(u.battleworn, 'battleworn').toBeTrue();
+  expect(getUnitStatus(u), 'status').toBe('shaken');
+});
+
+test('⑤ hits=0 → Rally不可（変化なし）', () => {
+  const u = mkUnit({ hits:0, battleworn:false });
+  doRally(u);
+  expect(u.hits, 'hits').toBe(0);
+});
+
+// --------------------------------------------------
+section('敵AI — ターゲット優先順位 (getEnemyTargetPriority)');
+// --------------------------------------------------
+
+test('① refAddrあり: 近いユニットが先頭', () => {
+  const near = mkUnit({ id:'near', col:11, row:8, army:'french', sp:3, er:4, hits:0 });
+  const far  = mkUnit({ id:'far',  col:14, row:8, army:'french', sp:5, er:4, hits:0 });
+  const sorted = getEnemyTargetPriority([far, near], '1008');
+  expect(sorted[0].id, '1st').toBe('near');
+});
+
+test('② 同距離: SP大きい方が先頭', () => {
+  const a = mkUnit({ id:'a', col:12, row:8, army:'french', sp:3, er:4, hits:0 });
+  const b = mkUnit({ id:'b', col:12, row:9, army:'french', sp:5, er:4, hits:0 });
+  const sorted = getEnemyTargetPriority([a, b], '1008');
+  expect(sorted[0].id, '1st').toBe('b');
+});
+
+test('③ 同距離・同SP: ER小さい方が先頭', () => {
+  const a = mkUnit({ id:'a', col:12, row:8, army:'french', sp:4, er:5, hits:0 });
+  const b = mkUnit({ id:'b', col:12, row:9, army:'french', sp:4, er:3, hits:0 });
+  const sorted = getEnemyTargetPriority([a, b], '1008');
+  expect(sorted[0].id, '1st').toBe('b');
+});
+
+test('④ 同effectiveSP・同effectiveER: Hit多い方が先頭', () => {
+  // b: hits=2(Disrupted) baseSP=5,baseER=5 → effectiveSP=4, effectiveER=4
+  // a: hits=0(Fresh)     baseSP=4,baseER=4 → effectiveSP=4, effectiveER=4
+  // effective値が同じ → raw hits tiebreaker: b(2) > a(0) → b wins
+  const a = mkUnit({ id:'a', col:12, row:8, army:'french', sp:4, er:4, hits:0, battleworn:false });
+  const b = mkUnit({ id:'b', col:14, row:8, army:'french', sp:5, er:5, hits:2, battleworn:false });
+  const sorted = getEnemyTargetPriority([a, b], null);
+  expect(sorted[0].id, '1st').toBe('b');
+});
+
+test('⑤ refAddr=null: SPで比較（距離無視）', () => {
+  const a = mkUnit({ id:'a', col:11, row:8, army:'french', sp:3, er:4, hits:0 });
+  const b = mkUnit({ id:'b', col:15, row:8, army:'french', sp:6, er:4, hits:0 });
+  const sorted = getEnemyTargetPriority([a, b], null);
+  expect(sorted[0].id, '1st by SP').toBe('b');
+});
+
+// --------------------------------------------------
+section('敵AI — Brussels VP優先選択 (selectAIBombardTarget)');
+// --------------------------------------------------
+
+test('① Brussels VP hex内ユニットが優先（nearestモード）', () => {
+  reset();
+  // attacker at 0804（連合軍artillery）
+  const atk = mkUnit({ id:'atk', col:8, row:4, type:'artillery', army:'allied', af:2, sp:0 });
+  // VP hex 0901 にフランスユニット（attackerより遠い）
+  const vpUnit = mkUnit({ id:'vp', col:9, row:1, army:'french', sp:3, af:0, er:4, hits:0 });
+  // 非VPユニット 0805（attackerに近い、VPでも隣接でもない）
+  // 0805の隣: 0804,0806,0705,0906等。BRUSSELS_VP_ADDRS(03/04/07/09/1401)には隣接しない
+  const nonVP = mkUnit({ id:'nv', col:8, row:5, army:'french', sp:5, af:0, er:4, hits:0 });
+  units.push(atk, vpUnit, nonVP);
+  const result = selectAIBombardTarget(atk, [vpUnit, nonVP], 'nearest');
+  expect(result.id, 'selected').toBe('vp');
+});
+
+test('② VP候補なし: 通常のnearest選択', () => {
+  reset();
+  const atk  = mkUnit({ id:'atk', col:5, row:8, type:'artillery', army:'allied', af:2, sp:0 });
+  const near = mkUnit({ id:'near', col:7,  row:8, army:'french', sp:2, er:4, hits:0 });
+  const far  = mkUnit({ id:'far',  col:10, row:8, army:'french', sp:5, er:4, hits:0 });
+  units.push(atk, near, far);
+  const result = selectAIBombardTarget(atk, [near, far], 'nearest');
+  expect(result.id, 'selected').toBe('near');
+});
+
+test('③ largestモード: SP大きい方を選択', () => {
+  reset();
+  const atk   = mkUnit({ id:'atk', col:8, row:8, type:'artillery', army:'allied', af:2, sp:0 });
+  const small = mkUnit({ id:'sm', col:9,  row:8, army:'french', sp:2, er:4, hits:0 });
+  const large = mkUnit({ id:'lg', col:13, row:8, army:'french', sp:6, er:4, hits:0 });
+  units.push(atk, small, large);
+  const result = selectAIBombardTarget(atk, [small, large], 'largest');
+  expect(result.id, 'selected').toBe('lg');
+});
+
+test('④ 空配列 → null を返す', () => {
+  reset();
+  const atk = mkUnit({ id:'atk', col:8, row:8, type:'artillery', army:'allied', af:2, sp:0 });
+  units.push(atk);
+  const result = selectAIBombardTarget(atk, [], 'nearest');
+  expect(result, 'result').toBe(null);
+});
+
+// --------------------------------------------------
+section('敵AI — コープスユニット取得 (getCorpsUnits)');
+// --------------------------------------------------
+
+test('① aa-I マーカー → _I で終わるユニットのみ', () => {
+  reset();
+  units.push(
+    mkUnit({ id:'unit_I',  army:'allied', isDetachment:false }),
+    mkUnit({ id:'unit_II', army:'allied', isDetachment:false }),
+    mkUnit({ id:'unit_RC', army:'allied', isDetachment:false }),
+  );
+  const marker = { id:'aa-I', type:'allied' };
+  const result = getCorpsUnits(marker);
+  expect(result.length, 'count').toBe(1);
+  expect(result[0].id, 'id').toBe('unit_I');
+});
+
+test('② aa-CC マーカー → _CC で終わるユニットのみ', () => {
+  reset();
+  units.push(
+    mkUnit({ id:'somerset_CC', army:'allied' }),
+    mkUnit({ id:'ponsonby_CC', army:'allied' }),
+    mkUnit({ id:'cooke_I',     army:'allied' }),
+  );
+  const marker = { id:'aa-CC', type:'allied' };
+  const result = getCorpsUnits(marker);
+  expect(result.length, 'count').toBe(2);
+});
+
+test('③ prussian マーカー → prussian 軍ユニットのみ', () => {
+  reset();
+  units.push(
+    mkUnit({ id:'pr1', army:'prussian' }),
+    mkUnit({ id:'pr2', army:'prussian' }),
+    mkUnit({ id:'al1', army:'allied'   }),
+  );
+  const marker = { id:'pr-IV', type:'prussian' };
+  const result = getCorpsUnits(marker);
+  expect(result.length, 'count').toBe(2);
+  expect(result.every(u => u.army === 'prussian'), 'all prussian').toBeTrue();
+});
+
+test('④ aa-det マーカー → isDetachment=true のみ', () => {
+  reset();
+  units.push(
+    mkUnit({ id:'det1', army:'allied', isDetachment:true }),
+    mkUnit({ id:'nrm1', army:'allied', isDetachment:false }),
+  );
+  const marker = { id:'aa-det', type:'allied' };
+  const result = getCorpsUnits(marker);
+  expect(result.length, 'count').toBe(1);
+  expect(result[0].id, 'id').toBe('det1');
+});
+
+// --------------------------------------------------
+section('敵AI — Rally Around the Colors（同期部分）');
+// --------------------------------------------------
+
+test('① Hit持ちユニット・敵非隣接 → ラリーのみ（後退なし）', () => {
+  reset();
+  const unit = mkUnit({ id:'al', col:10, row:8, army:'allied', sp:4, af:1, er:4, hits:2 });
+  units.push(unit);
+  const beforeAddr = hexAddr(unit.col, unit.row);
+  resolveRallyAroundColors_syncPart([unit]);
+  expect(hexAddr(unit.col, unit.row), 'position').toBe(beforeAddr);
+  expect(unit.hits, 'hits after rally').toBe(1);
+});
+
+test('② Hit持ちユニット・敵隣接 → 後退してからラリー', () => {
+  reset();
+  // hits:1（Shaken）を使用。後退中に敵隣接Hitを受けても2どまり→rally後1
+  const unit  = mkUnit({ id:'al',  col:10, row:8, army:'allied', sp:4, af:1, er:4, hits:1 });
+  const enemy = mkUnit({ id:'fr',  col:11, row:8, army:'french', sp:4, af:1, er:4, hits:0 });
+  units.push(unit, enemy);
+  const beforeAddr = hexAddr(unit.col, unit.row);
+  resolveRallyAroundColors_syncPart([unit]);
+  expect(hexAddr(unit.col, unit.row) !== beforeAddr, 'retreated').toBeTrue();
+  // 後退中ペナルティがあってもhits<=元の値（rallied）
+  expect(unit.hits <= 1, 'hits not greater than before rally').toBeTrue();
+});
+
+test('③ Hit=0ユニットはラリー対象外（何も変化しない）', () => {
+  reset();
+  const unit = mkUnit({ id:'al', col:10, row:8, army:'allied', sp:4, af:1, er:4, hits:0 });
+  units.push(unit);
+  resolveRallyAroundColors_syncPart([unit]);
+  expect(unit.hits, 'hits unchanged').toBe(0);
+});
+
+test('④ 複数ユニット: Hitあり2体がラリー', () => {
+  reset();
+  const u1 = mkUnit({ id:'a1', col:8, row:8, army:'allied', sp:4, af:1, er:4, hits:1 });
+  const u2 = mkUnit({ id:'a2', col:10, row:8, army:'allied', sp:4, af:1, er:4, hits:2 });
+  units.push(u1, u2);
+  resolveRallyAroundColors_syncPart([u1, u2]);
+  expect(u1.hits, 'u1 hits').toBe(0);
+  expect(u2.hits, 'u2 hits').toBe(1);
+});
+
+// --------------------------------------------------
+section('敵AI Phase2 — isCavalryChargeEligible');
+// --------------------------------------------------
+
+// isCavalryChargeEligible の実装（index.html と同一）
+function isCavalryChargeEligible(attacker, target) {
+  const aAddr = hexAddr(attacker.col, attacker.row);
+  const tAddr = hexAddr(target.col, target.row);
+  const dist  = hexDistance(aAddr, tAddr);
+  if (dist < 1 || dist > 2) return false;
+  if (!calcLOS(aAddr, tAddr))      return false;
+  if (isDifficultTerrain(tAddr))   return false;
+  if (dist === 1) return !isRiverCrossing(aAddr, tAddr);
+  const intermediates = neighborAddrs(aAddr).filter(n =>
+    neighborAddrs(n).includes(tAddr) &&
+    !isDifficultTerrain(n)           &&
+    !isRiverCrossing(aAddr, n)       &&
+    !isRiverCrossing(n, tAddr)
+  );
+  return intermediates.length > 0;
+}
+
+test('① 距離1・Clear → charge可能', () => {
+  fullReset();
+  const atk = mkUnit({ id:'hc', col:10, row:8, type:'HC', army:'allied', sp:4 });
+  const def = mkUnit({ id:'fr', col:11, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(atk, def);
+  expect(isCavalryChargeEligible(atk, def), 'eligible').toBeTrue();
+});
+
+test('② 距離1・目標がWoods → charge不可', () => {
+  fullReset();
+  setTerrainTypes('1108', ['woods']);
+  const atk = mkUnit({ id:'hc', col:10, row:8, type:'HC', army:'allied', sp:4 });
+  const def = mkUnit({ id:'fr', col:11, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(atk, def);
+  expect(isCavalryChargeEligible(atk, def), 'eligible').toBeFalse();
+});
+
+test('③ 距離3 → charge不可', () => {
+  fullReset();
+  const atk = mkUnit({ id:'hc', col:10, row:8, type:'HC', army:'allied', sp:4 });
+  const def = mkUnit({ id:'fr', col:13, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(atk, def);
+  expect(isCavalryChargeEligible(atk, def), 'eligible').toBeFalse();
+});
+
+test('④ 距離2・中間がClear → charge可能', () => {
+  fullReset();
+  const atk = mkUnit({ id:'hc', col:10, row:8, type:'HC', army:'allied', sp:4 });
+  // distance 2 from 1008; pick a clear neighbor-of-neighbor
+  const neighbors = neighborAddrs('1008');
+  let defAddr = null;
+  for (const n of neighbors) {
+    const nn = neighborAddrs(n).find(x => x !== '1008' && hexDistance(x,'1008') === 2);
+    if (nn) { defAddr = nn; break; }
+  }
+  if (!defAddr) { test('④ skip: no dist-2 neighbor found'); return; }
+  const def = mkUnit({ id:'fr', col:parseInt(defAddr.slice(0,2),10), row:parseInt(defAddr.slice(2),10), type:'infantry', army:'french', sp:4 });
+  units.push(atk, def);
+  expect(isCavalryChargeEligible(atk, def), 'eligible').toBeTrue();
+});
+
+test('⑤ 距離2・全中間がWoods → charge不可', () => {
+  fullReset();
+  const atk = mkUnit({ id:'hc', col:10, row:8, type:'HC', army:'allied', sp:4 });
+  const neighbors = neighborAddrs('1008');
+  let defAddr = null;
+  const intermediates = [];
+  for (const n of neighbors) {
+    const nn = neighborAddrs(n).find(x => x !== '1008' && hexDistance(x,'1008') === 2);
+    if (nn) { defAddr = nn; intermediates.push(n); break; }
+  }
+  if (!defAddr) { return; }
+  // Make all intermediates between attacker and def → woods
+  for (const inter of neighborAddrs('1008').filter(n => neighborAddrs(n).includes(defAddr))) {
+    setTerrainTypes(inter, ['woods']);
+  }
+  const def = mkUnit({ id:'fr', col:parseInt(defAddr.slice(0,2),10), row:parseInt(defAddr.slice(2),10), type:'infantry', army:'french', sp:4 });
+  units.push(atk, def);
+  expect(isCavalryChargeEligible(atk, def), 'eligible').toBeFalse();
+});
+
+// --------------------------------------------------
+section('敵AI Phase2 — moveTowardTarget');
+// --------------------------------------------------
+
+// index.html から複製したヘルパー関数
+function getMA(type) {
+  if (type === 'HC') return 3;
+  if (type === 'LC') return 4;
+  return 2;
+}
+function isUphill(fromAddr, toAddr) { return !isRidge(fromAddr) && isRidge(toAddr); }
+function getMoveCost(fromAddr, toAddr) { return isUphill(fromAddr, toAddr) ? 2 : 1; }
+
+// computeReachableLocal（テスト用・index.html と同一実装）
+const prussianDeployed = false;
+function computeReachableLocal(unit) {
+  const MA = getMA(unit.type);
+  const startAddr = hexAddr(unit.col, unit.row);
+  const costMap = new Map([[startAddr, 0]]);
+  const queue   = [{ addr: startAddr, cost: 0 }];
+  const result  = new Map();
+  while (queue.length > 0) {
+    const { addr, cost } = queue.shift();
+    for (const nAddr of neighborAddrs(addr)) {
+      if (isRiverCrossing(addr, nAddr)) continue;
+      if (getUnitsAt(nAddr).some(u => u.army !== unit.army)) continue;
+      const moveCost = getMoveCost(addr, nAddr);
+      const newCost  = cost + moveCost;
+      if (newCost > MA) continue;
+      if ((costMap.get(nAddr) ?? Infinity) <= newCost) continue;
+      costMap.set(nAddr, newCost);
+      const isDifficult = isDifficultTerrain(nAddr) && !isOnRoad(addr, nAddr);
+      const hasEnemyAdj = isEnemyAdjacentTo(nAddr, unit.army);
+      const mustStop    = isDifficult || hasEnemyAdj;
+      if (canLandAt(nAddr, unit)) result.set(nAddr, mustStop);
+      if (!mustStop) queue.push({ addr: nAddr, cost: newCost });
+    }
+  }
+  return result;
+}
+
+function applyHexPriority(candidates, unit, fromAddr) {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+  return [...candidates].sort((a, b) => {
+    const aE = !isEnemyAdjacentTo(a, unit.army) ? 1 : 0;
+    const bE = !isEnemyAdjacentTo(b, unit.army) ? 1 : 0;
+    if (aE !== bE) return bE - aE;
+    const aSE = isRidge(a) === isRidge(fromAddr) ? 1 : 0;
+    const bSE = isRidge(b) === isRidge(fromAddr) ? 1 : 0;
+    if (aSE !== bSE) return bSE - aSE;
+    const aGood = (isRidge(a) || isDifficultTerrain(a)) ? 1 : 0;
+    const bGood = (isRidge(b) || isDifficultTerrain(b)) ? 1 : 0;
+    if (aGood !== bGood) return bGood - aGood;
+    const aOcc = getUnitsAt(a).filter(u => u.id !== unit.id).length === 0 ? 1 : 0;
+    const bOcc = getUnitsAt(b).filter(u => u.id !== unit.id).length === 0 ? 1 : 0;
+    if (aOcc !== bOcc) return bOcc - aOcc;
+    return 0;
+  })[0];
+}
+
+function isOnRoad() { return false; } // roads not used in tests
+
+function moveTowardTarget(unit, targetAddr, stopAtDist = 0) {
+  const reachable = computeReachableLocal(unit);
+  if (reachable.size === 0) return null;
+  const fromAddr = hexAddr(unit.col, unit.row);
+  let candidates = [...reachable.keys()];
+  if (stopAtDist > 0) {
+    const atDist = candidates.filter(a => hexDistance(a, targetAddr) === stopAtDist);
+    candidates = atDist.length > 0 ? atDist : (() => {
+      candidates.sort((a,b) => hexDistance(a, targetAddr)-hexDistance(b, targetAddr));
+      const minD = hexDistance(candidates[0], targetAddr);
+      return candidates.filter(a => hexDistance(a, targetAddr) === minD);
+    })();
+  } else {
+    candidates.sort((a, b) => hexDistance(a, targetAddr) - hexDistance(b, targetAddr));
+    const minD = hexDistance(candidates[0], targetAddr);
+    candidates = candidates.filter(a => hexDistance(a, targetAddr) === minD);
+  }
+  const chosen = applyHexPriority(candidates, unit, fromAddr);
+  if (!chosen || chosen === fromAddr) return null;
+  unit.col = parseInt(chosen.slice(0, 2), 10);
+  unit.row = parseInt(chosen.slice(2), 10);
+  return chosen;
+}
+
+test('① 移動後はターゲットに近づいている', () => {
+  fullReset();
+  const unit   = mkUnit({ id:'al', col:10, row:10, type:'infantry', army:'allied', sp:4 });
+  const target = mkUnit({ id:'fr', col:10, row:4,  army:'french',   sp:4 });
+  units.push(unit, target);
+  const tAddr = hexAddr(target.col, target.row);
+  const before = hexDistance(hexAddr(unit.col, unit.row), tAddr);
+  moveTowardTarget(unit, tAddr);
+  const after = hexDistance(hexAddr(unit.col, unit.row), tAddr);
+  expect(after < before, 'closer to target').toBeTrue();
+});
+
+test('② stopAtDist=2 でターゲットから距離2に停止', () => {
+  fullReset();
+  // HC at 1010 (dist=3 from target 1007), MA=3. stopAtDist=2 should land at dist=2.
+  const unit   = mkUnit({ id:'hc', col:10, row:10, type:'HC', army:'allied', sp:4 });
+  const target = mkUnit({ id:'fr', col:10, row:7,  army:'french', sp:4 });
+  units.push(unit, target);
+  const tAddr = hexAddr(target.col, target.row);
+  moveTowardTarget(unit, tAddr, 2);
+  const afterDist = hexDistance(hexAddr(unit.col, unit.row), tAddr);
+  expect(afterDist <= 2, 'at most 2 hexes from target').toBeTrue();
+});
+
+test('③ 等距離候補は敵非隣接ヘックスを優先（優先ルール1）', () => {
+  fullReset();
+  // U=0605 (infantry MA=2), T=0808 (target, dist=4).
+  // Two dist=2 candidates reachable from U: H1=0806 (adj to E=0906) and H2=0607 (not adj to E).
+  // P1 should choose H2=0607 over H1=0806.
+  const unit   = mkUnit({ id:'al', col:6, row:5, type:'infantry', army:'allied', sp:4 });
+  const target = mkUnit({ id:'fr', col:8, row:8, army:'french', sp:4 });
+  const enemy2 = mkUnit({ id:'fr2', col:9, row:6, army:'french', sp:4 });
+  units.push(unit, target, enemy2);
+  const tAddr = hexAddr(target.col, target.row);
+  moveTowardTarget(unit, tAddr);
+  const finalAddr = hexAddr(unit.col, unit.row);
+  expect(!isEnemyAdjacentTo(finalAddr, 'allied'), 'chose non-enemy-adjacent hex').toBeTrue();
+  expect(hexDistance(finalAddr, tAddr) === 2, 'stopped at dist=2 from target').toBeTrue();
+});
+
+// --------------------------------------------------
+section('Wellington — Condition Flags');
+// --------------------------------------------------
+
+// テスト用フラグとisBritish
+let reverseSlope   = false;
+let thinRedLine    = false;
+let scumOfTheEarth = false;
+
+const BRITISH_UNIT_IDS_T = new Set([
+  'cooke_I', 'kielmansegge_I', 'alten_I',
+  'halkett_II', 'mitchell_II', 'clinton_II',
+  '1reserve_RC', '2reserve_RC', 'picton_RC', 'lambert_RC',
+  'somerset_CC', 'ponsonby_CC', 'rightflank_CC', 'vandeleur_CC', 'vivian_CC', 'ha_reserve_CC',
+  'hougoumont_det', 'lahayesainte_det',
+]);
+function isBritish(unit) { return BRITISH_UNIT_IDS_T.has(unit.id); }
+
+// getEffectiveER の Wellington 修正込み版
+function getEffectiveER_W(unit) {
+  let er = unit.er ?? 4;
+  const st = getUnitStatus(unit);
+  if (st === 'shaken' || st === 'disrupted') er = Math.max(1, er - 1);
+  if (unit.army === 'allied' && unit.type === 'infantry' && isBritish(unit)) {
+    if (thinRedLine)    er = Math.min(6, er + 1);
+    if (scumOfTheEarth) er = Math.max(1, er - 1);
+  }
+  return er;
+}
+function getEffectiveSP_W(unit) {
+  let sp = unit.sp ?? 0;
+  if (getUnitStatus(unit) === 'disrupted') sp = Math.max(0, sp - 1);
+  if (thinRedLine && unit.army === 'allied' && unit.type === 'infantry' && isBritish(unit)) sp++;
+  return sp;
+}
+
+// calcBombardmentTargetNumber の reverseSlope 修正込み版
+function calcBombardmentTN_W(targetAddr, targetUnit) {
+  if (reverseSlope && isRidge(targetAddr) &&
+      targetUnit && targetUnit.army === 'allied' && targetUnit.type !== 'artillery') return 5;
+  const types = getTerrainTypes(targetAddr);
+  if (types.includes('walled_buildings')) return 6;
+  if (types.includes('buildings') || types.includes('woods')) return 5;
+  let tn = 4;
+  if (targetUnit && (targetUnit.type === 'HC' || targetUnit.type === 'LC')) tn--;
+  return tn;
+}
+
+test('① isBritish: cooke_I=true, bylandt_I=false', () => {
+  expect(isBritish({ id: 'cooke_I' }), 'cooke is British').toBeTrue();
+  expect(!isBritish({ id: 'bylandt_I' }), 'bylandt is not British').toBeTrue();
+});
+
+test('② thinRedLine: British Infantry ER+1 SP+1', () => {
+  fullReset();
+  thinRedLine = true;
+  const brit  = mkUnit({ id: 'picton_RC', type: 'infantry', army: 'allied', sp: 5, er: 5, hits: 0 });
+  const other = mkUnit({ id: 'bylandt_I', type: 'infantry', army: 'allied', sp: 3, er: 3, hits: 0 });
+  units.push(brit, other);
+  expect(getEffectiveER_W(brit), 'British ER').toBe(6);
+  expect(getEffectiveSP_W(brit), 'British SP').toBe(6);
+  expect(getEffectiveER_W(other), 'non-British ER unchanged').toBe(3);
+  thinRedLine = false;
+});
+
+test('③ scumOfTheEarth: British Infantry ER-1', () => {
+  fullReset();
+  scumOfTheEarth = true;
+  const brit = mkUnit({ id: 'halkett_II', type: 'infantry', army: 'allied', er: 4, hits: 0 });
+  units.push(brit);
+  expect(getEffectiveER_W(brit), 'British ER -1').toBe(3);
+  scumOfTheEarth = false;
+});
+
+test('④ reverseSlope: Allied Infantry on Ridge → TN=5', () => {
+  fullReset();
+  reverseSlope = true;
+  setTerrainTypes('1008', ['ridge']);
+  const target = mkUnit({ id: 'cooke_I', type: 'infantry', army: 'allied', er: 5 });
+  units.push(target);
+  expect(calcBombardmentTN_W('1008', target), 'Ridge Allied inf TN=5').toBe(5);
+  reverseSlope = false;
+});
+
+test('⑤ reverseSlope: Allied Cavalry on Ridge → TN=5', () => {
+  fullReset();
+  reverseSlope = true;
+  setTerrainTypes('0906', ['ridge']);
+  const target = mkUnit({ id: 'somerset_CC', type: 'HC', army: 'allied', er: 5 });
+  units.push(target);
+  expect(calcBombardmentTN_W('0906', target), 'Ridge Allied HC TN=5').toBe(5);
+  reverseSlope = false;
+});
+
+test('⑥ reverseSlope: Allied Artillery on Ridge → 通常TN（4）', () => {
+  fullReset();
+  reverseSlope = true;
+  setTerrainTypes('1008', ['ridge']);
+  const art = mkUnit({ id: 'ha_reserve_CC', type: 'artillery', army: 'allied' });
+  units.push(art);
+  expect(calcBombardmentTN_W('1008', art), 'Artillery not affected by reverseSlope').toBe(4);
+  reverseSlope = false;
+});
+
+test('⑦ reverseSlope OFF: Ridge Allied Infantry → 通常TN（4）', () => {
+  fullReset();
+  setTerrainTypes('1008', ['ridge']);
+  const target = mkUnit({ id: 'cooke_I', type: 'infantry', army: 'allied', er: 5 });
+  units.push(target);
+  expect(calcBombardmentTN_W('1008', target), 'No flag: TN=4').toBe(4);
+});
+
+// --------------------------------------------------
+section('Blücher — advanceTRTMarkers（chit-pull.js）');
+// --------------------------------------------------
+
+// ChitPullSystem のインスタンスを作成してテスト
+function makeCPS() {
+  // ChitPullSystem は chit-pull.js で定義済み（test-runner.htmlはchit-pull.jsを読まない）
+  // ここでは advanceTRTMarkers のロジックを直接テスト
+  return {
+    turn: 9,
+    trtMarkers: [
+      { id: 'pr-IV', type: 'prussian', label: 'IV Corps', sub: 'Bülow', trtTurn: 11 },
+      { id: 'pr-II', type: 'prussian', label: 'II Corps', sub: 'Pirch I', trtTurn: 12 },
+    ],
+    log: [],
+    _log(msg) { this.log.push(msg); },
+    advanceTRTMarkers() {
+      const deployed = [];
+      for (const m of this.trtMarkers) {
+        m.trtTurn = Math.max(this.turn, m.trtTurn - 1);
+      }
+      const arrived = this.trtMarkers.filter(m => m.trtTurn <= this.turn);
+      this.trtMarkers = this.trtMarkers.filter(m => m.trtTurn > this.turn);
+      for (const m of arrived) deployed.push(m);
+      return deployed;
+    },
+  };
+}
+
+test('① turn9: TRT前進 → IV Corps T11→10, II Corps T12→11', () => {
+  const cps = makeCPS();
+  const deployed = cps.advanceTRTMarkers();
+  expect(deployed.length, 'no deployment yet').toBe(0);
+  expect(cps.trtMarkers[0].trtTurn, 'IV Corps T10').toBe(10);
+  expect(cps.trtMarkers[1].trtTurn, 'II Corps T11').toBe(11);
+});
+
+test('② turn10: TRT前進 → IV Corps T10到着', () => {
+  const cps = makeCPS();
+  cps.turn = 10;
+  const deployed = cps.advanceTRTMarkers();
+  expect(deployed.length, 'IV Corps arrives').toBe(1);
+  expect(deployed[0].id, 'is IV Corps').toBe('pr-IV');
+  expect(cps.trtMarkers.length, 'only II Corps remains').toBe(1);
+});
+
+test('③ turn11: 全コープス前進で2体到着', () => {
+  const cps = makeCPS();
+  cps.turn = 11;
+  const deployed = cps.advanceTRTMarkers();
+  // IV Corps: T11→min(11, 10)=10 ≤ 11 → deployed
+  // II Corps: T12→min(11, 11)=11 ≤ 11 → deployed
+  expect(deployed.length, 'both arrive').toBe(2);
+  expect(cps.trtMarkers.length, 'TRT empty').toBe(0);
+});
+
+// --------------------------------------------------
+section('敵AI Phase3 — isQualifiedVPHex / frenchControlHexes');
+// --------------------------------------------------
+
+// Phase 3 ヘルパーをスタンドアロンで実装
+const BRUSSELS_VP_ADDRS_T3 = new Set(['0301','0401','0701','0901','1401']);
+const VP_HEXES_T3 = [
+  { addr:'0409', vp:6 },{ addr:'0204', vp:5 },{ addr:'0802', vp:5 },
+  { addr:'1007', vp:4 },{ addr:'0903', vp:3 },{ addr:'0104', vp:3 },
+  { addr:'0301', vp:3 },{ addr:'0401', vp:3 },{ addr:'0701', vp:3 },
+  { addr:'0901', vp:3 },{ addr:'1401', vp:3 },{ addr:'1607', vp:2 },
+  { addr:'1412', vp:1 },{ addr:'1413', vp:1 },{ addr:'1512', vp:1 },
+  { addr:'1110', vp:-4},{ addr:'1015', vp:-6},
+];
+const ALL_VP_ADDRS_T3 = new Set(VP_HEXES_T3.map(h => h.addr));
+const frenchControlHexes_t3 = new Set();
+
+function isQualifiedVPHex_t3(addr, unitAddr, isAllied) {
+  const frenchOn  = frenchControlHexes_t3.has(addr) ||
+                    getUnitsAt(addr).some(u => u.army === 'french');
+  const frenchAdj = neighborAddrs(addr).some(n =>
+    getUnitsAt(n).some(u => u.army === 'french'));
+  if (!frenchOn && !frenchAdj) return false;
+  const dist = hexDistance(addr, unitAddr);
+  if (dist <= 4) return true;
+  return isAllied && BRUSSELS_VP_ADDRS_T3.has(addr);
+}
+
+function getNearestQualifiedVP_t3(unitAddr, isAllied) {
+  const candidates = VP_HEXES_T3
+    .filter(h => isQualifiedVPHex_t3(h.addr, unitAddr, isAllied))
+    .map(h => ({ ...h, dist: hexDistance(h.addr, unitAddr) }))
+    .sort((a, b) => a.dist - b.dist || b.vp - a.vp);
+  return candidates[0] || null;
+}
+
+test('① フランスユニット在中VPヘックスはqualified（距離4以内）', () => {
+  fullReset();
+  frenchControlHexes_t3.clear();
+  const vp = '1007';   // La Haye Sainte
+  const french = mkUnit({ id:'fr1', col:10, row:7, army:'french', sp:4 });
+  units.push(french);
+  const unitAddr = hexAddr(8, 7); // 距離2
+  expect(isQualifiedVPHex_t3(vp, unitAddr, true), 'adjacent french → qualified').toBeTrue();
+});
+
+test('② フランス不在VPヘックスはqualifiedでない', () => {
+  fullReset();
+  frenchControlHexes_t3.clear();
+  const vp = '1007';
+  const unitAddr = hexAddr(8, 7);
+  expect(isQualifiedVPHex_t3(vp, unitAddr, true), 'no french → not qualified').toBeFalse();
+});
+
+test('③ フランスコントロール設定済みはqualified（frenchAdj不要）', () => {
+  fullReset();
+  frenchControlHexes_t3.clear();
+  const vp = '0409';   // Hougoumont
+  frenchControlHexes_t3.add(vp);
+  const unitAddr = hexAddr(6, 7); // 距離3
+  expect(isQualifiedVPHex_t3(vp, unitAddr, false), 'french control → qualified').toBeTrue();
+  frenchControlHexes_t3.clear();
+});
+
+test('④ 距離5超は通常unqualified（Allied + Brussels Road は例外）', () => {
+  fullReset();
+  frenchControlHexes_t3.clear();
+  // Brussels VP 0301 にフランスコントロール設定
+  frenchControlHexes_t3.add('0301');
+  const unitAddr = hexAddr(10, 8); // 距離 > 4 になる位置
+  const distToVP = hexDistance('0301', unitAddr);
+  if (distToVP > 4) {
+    expect(isQualifiedVPHex_t3('0301', unitAddr, true), 'allied+Brussels: no dist limit').toBeTrue();
+    expect(isQualifiedVPHex_t3('0301', unitAddr, false), 'prussian: dist limit applies').toBeFalse();
+  } else {
+    // 距離がたまたま4以内の場合、両方trueになることを確認
+    expect(isQualifiedVPHex_t3('0301', unitAddr, true), 'within 4: true').toBeTrue();
+    expect(isQualifiedVPHex_t3('0301', unitAddr, false), 'within 4: also true').toBeTrue();
+  }
+  frenchControlHexes_t3.clear();
+});
+
+test('⑤ getNearestQualifiedVP: 複数候補から最近のものを返す', () => {
+  fullReset();
+  frenchControlHexes_t3.clear();
+  // Papelotte(1607)とHougoumont(0409)にフランス隣接を作る
+  // unitを0803に置く: 1007(La Haye Sainte)に隣接フランスを置く
+  const fr1 = mkUnit({ id:'fr1', col:10, row:8, army:'french', sp:4 }); // 1008: 1007に隣接
+  units.push(fr1);
+  const unitAddr = hexAddr(8, 7); // 0807
+  const vp = getNearestQualifiedVP_t3(unitAddr, true);
+  expect(vp !== null, 'found VP').toBeTrue();
+  // 1007とfr1(1008)はneighbors? hexDistance(1007,1008) = ?
+  // col=10,row=7 vs col=10,row=8 → same col, adj row → dist=1: yes
+  expect(vp.addr, 'nearest VP is La Haye Sainte').toBe('1007');
+});
+
+// ============================================================
+// LOS — calcLOS
+// ============================================================
+section('LOS — calcLOS');
+
+test('① 同ヘックスは通視', () => {
+  fullReset();
+  expect(calcLOS('1008','1008'), 'same hex').toBeTrue();
+});
+
+test('② 隣接ヘックスは常に通視', () => {
+  fullReset();
+  setTerrainTypes('1008', ['ridge']);
+  setTerrainTypes('1108', ['woods']);
+  // 隣接hexはLOS計算をパスする（N=1）
+  expect(calcLOS('1008','1108'), 'adjacent always LOS').toBeTrue();
+});
+
+test('③ Flat→Flat: 間にRidgeがあれば遮断', () => {
+  fullReset();
+  setTerrainTypes('1008', ['ridge']); // 中間
+  expect(calcLOS('0808','1208'), 'ridge blocks flat-flat').toBeFalse();
+});
+
+test('④ Flat→Flat: 間にWoodsがあれば遮断', () => {
+  fullReset();
+  setTerrainTypes('1008', ['woods']); // 中間
+  expect(calcLOS('0808','1208'), 'woods blocks flat-flat').toBeFalse();
+});
+
+test('⑤ Flat→Flat: 間に障害なし → 通視', () => {
+  fullReset();
+  expect(calcLOS('0808','1208'), 'clear flat-flat LOS').toBeTrue();
+});
+
+test('⑥ Ridge→Flat: 間にRidgeがあっても通視（両方Flatでない）', () => {
+  fullReset();
+  setTerrainTypes('0808', ['ridge']); // 射撃側Ridge
+  setTerrainTypes('1008', ['ridge']); // 中間Ridge
+  // from=ridge, to=flat → 規則Aは適用されない（片方Ridgeでないと遮断されない）
+  expect(calcLOS('0808','1208'), 'ridge shooter over ridge').toBeTrue();
+});
+
+test('⑦ Ridge→Flat: 中間Ridge上にWoodsがあれば遮断', () => {
+  fullReset();
+  setTerrainTypes('0808', ['ridge']); // 射撃側Ridge
+  setTerrainTypes('1008', ['ridge', 'woods']); // 中間RidgeにWoods
+  expect(calcLOS('0808','1208'), 'ridge+woods on ridge blocks').toBeFalse();
+});
+
+test('⑧ 距離2の通視（中間ヘックスなし）', () => {
+  fullReset();
+  expect(calcLOS('0808','1008'), 'dist2 no blocker').toBeTrue();
+});
+
+// ============================================================
+// 河川 — isRiverCrossing / isRiverHexside
+// ============================================================
+section('河川 — isRiverCrossing / isRiverHexside');
+
+test('① 河川なし → crossing=false', () => {
+  fullReset();
+  expect(isRiverCrossing('1008','1108'), 'no river').toBeFalse();
+});
+
+test('② 河川あり → crossing=true', () => {
+  fullReset();
+  addRiver('1008','1108');
+  expect(isRiverCrossing('1008','1108'), 'river crossing').toBeTrue();
+  expect(isRiverCrossing('1108','1008'), 'bidirectional').toBeTrue();
+});
+
+test('③ 橋あり → crossing=false（橋経由）', () => {
+  fullReset();
+  addRiver('1008','1108');
+  bridgeHexsides.push({ from:'1008', to:'1108' });
+  expect(isRiverCrossing('1008','1108'), 'bridge=no crossing').toBeFalse();
+});
+
+test('④ 別hexsideの河川は別crossing', () => {
+  fullReset();
+  addRiver('1008','1108');
+  expect(isRiverCrossing('1008','1009'), 'diff hexside = no').toBeFalse();
+});
+
+// ============================================================
+// スタックルール — canLandAt
+// ============================================================
+section('スタックルール — canLandAt');
+
+test('① 空hexは着地OK', () => {
+  fullReset();
+  const u = mkUnit({ id:'u1', col:10, row:8, army:'french', small:false });
+  expect(canLandAt('1008', u), 'empty hex').toBeTrue();
+});
+
+test('② 友軍1体(large)にlarge→NG', () => {
+  fullReset();
+  const u1 = mkUnit({ id:'u1', col:10, row:8, army:'french', small:false });
+  const u2 = mkUnit({ id:'u2', col:11, row:8, army:'french', small:false });
+  units.push(u1);
+  expect(canLandAt('1008', u2), 'large+large=NG').toBeFalse();
+});
+
+test('③ 友軍1体(small)にlarge→OK', () => {
+  fullReset();
+  const u1 = mkUnit({ id:'u1', col:10, row:8, army:'french', small:true  });
+  const u2 = mkUnit({ id:'u2', col:11, row:8, army:'french', small:false });
+  units.push(u1);
+  expect(canLandAt('1008', u2), 'small+large=OK').toBeTrue();
+});
+
+test('④ 友軍1体(large)にsmall→OK', () => {
+  fullReset();
+  const u1 = mkUnit({ id:'u1', col:10, row:8, army:'french', small:false });
+  const u2 = mkUnit({ id:'u2', col:11, row:8, army:'french', small:true  });
+  units.push(u1);
+  expect(canLandAt('1008', u2), 'large+small=OK').toBeTrue();
+});
+
+test('⑤ 友軍2体以上→NG（smallでも3体目はNG）', () => {
+  fullReset();
+  const u1 = mkUnit({ id:'u1', col:10, row:8, army:'french', small:true });
+  const u2 = mkUnit({ id:'u2', col:10, row:8, army:'french', small:true });
+  const u3 = mkUnit({ id:'u3', col:11, row:8, army:'french', small:true });
+  units.push(u1, u2);
+  expect(canLandAt('1008', u3), '3rd unit=NG').toBeFalse();
+});
+
+test('⑥ 自分自身のhexは着地OK（移動先同一hex）', () => {
+  fullReset();
+  const u1 = mkUnit({ id:'u1', col:10, row:8, army:'french', small:false });
+  units.push(u1);
+  // canLandAt excludes movingUnit itself
+  expect(canLandAt('1008', u1), 'self hex OK').toBeTrue();
+});
+
+// ============================================================
+// 移動BFS — computeReachableLocal
+// ============================================================
+section('移動BFS — computeReachableLocal');
+
+test('① Infantry MA=2: 2hex以内に到達', () => {
+  fullReset();
+  const u = mkUnit({ id:'fr', col:10, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(u);
+  const reach = computeReachableLocal(u);
+  // dist=1: reachable; dist=2: reachable; dist=3: not
+  expect(reach.has('1108'), 'dist=1 reachable').toBeTrue();
+  expect(reach.has('1208'), 'dist=2 reachable').toBeTrue();
+  expect(reach.has('1308'), 'dist=3 not reachable').toBeFalse();
+});
+
+test('② HC MA=3: 3hex以内に到達', () => {
+  fullReset();
+  const u = mkUnit({ id:'fr', col:10, row:8, type:'HC', army:'french', sp:4 });
+  units.push(u);
+  const reach = computeReachableLocal(u);
+  expect(reach.has('1308'), 'HC dist=3 reachable').toBeTrue();
+  expect(reach.has('1408'), 'HC dist=4 not reachable').toBeFalse();
+});
+
+test('③ 登り坂(flat→ridge)はコスト2', () => {
+  fullReset();
+  setTerrainTypes('1108', ['ridge']); // 隣接がRidge
+  const u = mkUnit({ id:'fr', col:10, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(u);
+  const reach = computeReachableLocal(u);
+  // 1108(ridge)へのコスト=2=MA → 到達可能だが停止必須(mustStop=false)
+  expect(reach.has('1108'), 'ridge at cost=2 reachable').toBeTrue();
+  // 1108の先(cost>2)は不到達
+  // 1108からさらに進めないことを確認（mustStop=falseなのでBFS継続するが残りコスト=0）
+  const reach2 = computeReachableLocal(mkUnit({ id:'fr2', col:11, row:8, type:'infantry', army:'french' }));
+  expect(reach2.has('1208'), 'from ridge dist=1 reachable').toBeTrue();
+});
+
+test('④ 難地形(woods)では停止必須（mustStop=true）', () => {
+  fullReset();
+  setTerrainTypes('1108', ['woods']);
+  const u = mkUnit({ id:'fr', col:10, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(u);
+  const reach = computeReachableLocal(u);
+  expect(reach.has('1108'), 'woods hex reachable').toBeTrue();
+  expect(reach.get('1108'), 'woods=mustStop').toBeTrue();
+  // woods を通過してさらに先へは行けない
+  expect(reach.has('1208'), 'beyond woods not reachable').toBeFalse();
+});
+
+test('⑤ 敵ユニット占有hexは進入不可', () => {
+  fullReset();
+  const u    = mkUnit({ id:'fr',  col:10, row:8, type:'infantry', army:'french',  sp:4 });
+  const enemy= mkUnit({ id:'en',  col:11, row:8, type:'infantry', army:'allied',   sp:4 });
+  units.push(u, enemy);
+  const reach = computeReachableLocal(u);
+  expect(!reach.has('1108'), 'enemy hex blocked').toBeTrue();
+});
+
+test('⑥ Enemy Threatヘックス（敵隣接）では停止必須', () => {
+  fullReset();
+  const u    = mkUnit({ id:'fr',  col:10, row:8, type:'infantry', army:'french',  sp:4 });
+  const enemy= mkUnit({ id:'en',  col:12, row:8, type:'infantry', army:'allied',   sp:4 });
+  units.push(u, enemy);
+  const reach = computeReachableLocal(u);
+  // 1108 は enemy(1208)に隣接 → mustStop=true
+  expect(reach.has('1108'), 'threat-adj reachable').toBeTrue();
+  expect(reach.get('1108'), 'threat-adj mustStop').toBeTrue();
+});
+
+test('⑦ 河川越えはブロック', () => {
+  fullReset();
+  addRiver('1008','1108');
+  const u = mkUnit({ id:'fr', col:10, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(u);
+  const reach = computeReachableLocal(u);
+  expect(!reach.has('1108'), 'river blocks movement').toBeTrue();
+});
+
+test('⑧ 友軍占有hexは通過可・停止不可', () => {
+  fullReset();
+  const u      = mkUnit({ id:'fr1', col:10, row:8, type:'infantry', army:'french', sp:4, small:false });
+  const friend = mkUnit({ id:'fr2', col:11, row:8, type:'infantry', army:'french', sp:4, small:false });
+  const dest   = mkUnit({ id:'fr3', col:12, row:8, type:'infantry', army:'french', sp:4, small:false });
+  units.push(u, friend, dest);
+  const reach = computeReachableLocal(u);
+  // 1108に友軍(large) → canLandAt=false → not in result（停止不可）
+  // ただしBFS継続可なので1208も試みるが、1208にも友軍(large) → canLandAt=false
+  expect(!reach.has('1108'), 'friendly large: cant stop').toBeTrue();
+  expect(!reach.has('1208'), 'beyond also cant stop').toBeTrue();
+});
+
+// ============================================================
+// Napoleon — performElanTest with Vive boost
+// ============================================================
+section('Napoleon — Vive L\'Empereur! (performElanTest boost)');
+
+// スタンドアロン版 performElanTest（Vive boost付き）
+let viveBoostUnitId_T = null;
+
+function performElanTest_V(unit, fixedRoll = null, fixedReroll = null) {
+  const er = getEffectiveER(unit);
+  let viveBonus = 0;
+  if (viveBoostUnitId_T && unit.id === viveBoostUnitId_T) {
+    viveBonus = 2;
+    viveBoostUnitId_T = null; // 1回使い切り
+  }
+  const testER = er + viveBonus;
+  const roll = fixedRoll !== null ? fixedRoll : rollD6();
+  if (er >= 6 && roll === 6 && testER <= 6) {
+    const reroll = fixedReroll !== null ? fixedReroll : rollD6();
+    return { roll, reroll, success: reroll <= 3, er, testER };
+  }
+  return { roll, reroll: null, success: roll <= testER, er, testER };
+}
+
+test('① Vive boost: ER4+2=6 → roll=6でも成功', () => {
+  fullReset();
+  const u = mkUnit({ id:'og1', er:4, hits:0 });
+  units.push(u);
+  viveBoostUnitId_T = 'og1';
+  const r = performElanTest_V(u, 6); // roll=6, testER=6 → 6<=6 → success
+  expect(r.success, 'ER4+2=6, roll=6: success').toBeTrue();
+  expect(viveBoostUnitId_T, 'boost consumed').toBe(null);
+});
+
+test('② Vive boost: 1回使い切り（2回目は通常ER）', () => {
+  fullReset();
+  const u = mkUnit({ id:'og1', er:3, hits:0 });
+  units.push(u);
+  viveBoostUnitId_T = 'og1';
+  performElanTest_V(u, 2); // 1回目: boost消費
+  // 2回目: boost消費済み → ER=3, roll=4で失敗
+  const r2 = performElanTest_V(u, 4);
+  expect(r2.success, '2nd test no boost: roll=4>ER3 fail').toBeFalse();
+});
+
+test('③ Vive boost: 別ユニットには適用されない', () => {
+  fullReset();
+  const u1 = mkUnit({ id:'og1', er:3, hits:0 });
+  const u2 = mkUnit({ id:'og2', er:3, hits:0 });
+  units.push(u1, u2);
+  viveBoostUnitId_T = 'og1';
+  const r = performElanTest_V(u2, 4); // u2に適用しない: ER=3, roll=4 → fail
+  expect(r.success, 'other unit not boosted').toBeFalse();
+  expect(viveBoostUnitId_T, 'boost not consumed').toBe('og1');
+  viveBoostUnitId_T = null;
+});
+
+test('④ Vive boost: ER6ユニット + boost → testER=8 → roll=6でも成功（ER6再ロール不適用）', () => {
+  fullReset();
+  const u = mkUnit({ id:'elite', er:6, hits:0 });
+  units.push(u);
+  viveBoostUnitId_T = 'elite';
+  // er>=6 && roll===6 だが testER=8>6 → 再ロール分岐に入らない
+  const r = performElanTest_V(u, 6, 6);
+  expect(r.success, 'ER6+2=8, roll=6: no reroll, success').toBeTrue();
+  expect(r.reroll, 'no reroll').toBe(null);
+});
+
+// ============================================================
+// Napoleon — Pas de Charge! (computeReachableLocal MA+1)
+// ============================================================
+section('Napoleon — Pas de Charge! (MA+1 for French)');
+
+// pasDeChargeActive フラグをスタンドアロンで再実装
+let pasDeChargeActive_T = false;
+
+function computeReachableLocal_PDC(unit) {
+  const MA = getMA(unit.type) + (pasDeChargeActive_T && unit.army === 'french' ? 1 : 0);
+  const startAddr = hexAddr(unit.col, unit.row);
+  const costMap = new Map([[startAddr, 0]]);
+  const queue   = [{ addr: startAddr, cost: 0 }];
+  const result  = new Map();
+  while (queue.length > 0) {
+    const { addr, cost } = queue.shift();
+    for (const nAddr of neighborAddrs(addr)) {
+      if (isRiverCrossing(addr, nAddr)) continue;
+      if (getUnitsAt(nAddr).some(u => u.army !== unit.army)) continue;
+      const moveCost = getMoveCost(addr, nAddr);
+      const newCost  = cost + moveCost;
+      if (newCost > MA) continue;
+      if ((costMap.get(nAddr) ?? Infinity) <= newCost) continue;
+      costMap.set(nAddr, newCost);
+      const isDifficult = isDifficultTerrain(nAddr) && !isOnRoad(addr, nAddr);
+      const hasEnemyAdj = isEnemyAdjacentTo(nAddr, unit.army);
+      const mustStop    = isDifficult || hasEnemyAdj;
+      if (canLandAt(nAddr, unit)) result.set(nAddr, mustStop);
+      if (!mustStop) queue.push({ addr: nAddr, cost: newCost });
+    }
+  }
+  return result;
+}
+
+test('① Pas de Charge ON: French Infantry MA=3（+1）', () => {
+  fullReset();
+  pasDeChargeActive_T = true;
+  const u = mkUnit({ id:'fr', col:10, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(u);
+  const reach = computeReachableLocal_PDC(u);
+  expect(reach.has('1308'), 'MA+1: dist=3 reachable').toBeTrue();
+  expect(!reach.has('1408'), 'dist=4 not reachable').toBeTrue();
+  pasDeChargeActive_T = false;
+});
+
+test('② Pas de Charge ON: Allied Infantry は影響なし（MA=2のまま）', () => {
+  fullReset();
+  pasDeChargeActive_T = true;
+  const u = mkUnit({ id:'al', col:10, row:8, type:'infantry', army:'allied', sp:4 });
+  units.push(u);
+  const reach = computeReachableLocal_PDC(u);
+  expect(!reach.has('1308'), 'allied not boosted: dist=3 not reachable').toBeTrue();
+  pasDeChargeActive_T = false;
+});
+
+test('③ Pas de Charge OFF: French Infantry MA=2（通常）', () => {
+  fullReset();
+  pasDeChargeActive_T = false;
+  const u = mkUnit({ id:'fr', col:10, row:8, type:'infantry', army:'french', sp:4 });
+  units.push(u);
+  const reach = computeReachableLocal_PDC(u);
+  expect(!reach.has('1308'), 'no boost: dist=3 not reachable').toBeTrue();
+  expect(reach.has('1208'), 'dist=2 reachable').toBeTrue();
+});
+
+// ============================================================
+// Napoleon — Sun of Austerlitz!
+// ============================================================
+section('Napoleon — Sun of Austerlitz!');
+
+// スタンドアロン版 executeSunAusterlitz
+function executeSunAusterlitz_T(centerAddr) {
+  const candidates = [centerAddr, ...neighborAddrs(centerAddr)]
+    .flatMap(a => getUnitsAt(a).filter(u => u.army === 'french'))
+    .filter(u => !isEnemyAdjacentTo(hexAddr(u.col, u.row), 'french'));
+  const seen = new Set();
+  const unique = candidates.filter(u => {
+    if (seen.has(u.id)) return false;
+    seen.add(u.id);
+    return true;
+  });
+  const targets = unique.slice(0, 3);
+  for (const u of targets) u.hits = 0;
+  return targets.map(u => u.id);
+}
+
+test('① center hexのフランスユニットをSpecial Rally（hits→0）', () => {
+  fullReset();
+  const fr = mkUnit({ id:'fr1', col:10, row:8, army:'french', hits:2 });
+  units.push(fr);
+  executeSunAusterlitz_T('1008');
+  expect(fr.hits, 'hits cleared').toBe(0);
+});
+
+test('② 隣接hexのフランスユニットも対象', () => {
+  fullReset();
+  const fr1 = mkUnit({ id:'fr1', col:10, row:8, army:'french', hits:1 });
+  const fr2 = mkUnit({ id:'fr2', col:11, row:8, army:'french', hits:1 }); // 1108, adj to 1008
+  units.push(fr1, fr2);
+  const rallied = executeSunAusterlitz_T('1008');
+  expect(rallied.includes('fr1'), 'fr1 rallied').toBeTrue();
+  expect(rallied.includes('fr2'), 'fr2 rallied').toBeTrue();
+});
+
+test('③ 敵隣接ユニットは除外', () => {
+  fullReset();
+  const fr    = mkUnit({ id:'fr1', col:10, row:8, army:'french', hits:2 });
+  const enemy = mkUnit({ id:'en1', col:11, row:8, army:'allied',  hits:0 });
+  units.push(fr, enemy);
+  // fr1(1008) は enemy(1108)に隣接 → 除外
+  const rallied = executeSunAusterlitz_T('1008');
+  expect(rallied.length, 'enemy-adjacent excluded').toBe(0);
+  expect(fr.hits, 'hits not cleared').toBe(2);
+});
+
+test('④ 最大3ユニットまで（4体目は対象外）', () => {
+  fullReset();
+  // center 1008 に1体 + 隣接に3体 = 4体候補
+  const u1 = mkUnit({ id:'fr1', col:10, row:8, army:'french', hits:1 });
+  const u2 = mkUnit({ id:'fr2', col:11, row:8, army:'french', hits:1 }); // 1108 adj
+  const u3 = mkUnit({ id:'fr3', col:10, row:7, army:'french', hits:1 }); // 1007 adj
+  const u4 = mkUnit({ id:'fr4', col:10, row:9, army:'french', hits:1 }); // 1009 adj
+  units.push(u1, u2, u3, u4);
+  const rallied = executeSunAusterlitz_T('1008');
+  expect(rallied.length, 'max 3 units').toBe(3);
+  // 4体目はhitsが残っている
+  const allHits = [u1,u2,u3,u4].map(u => u.hits);
+  expect(allHits.filter(h => h === 1).length, 'one unit not rallied').toBe(1);
+});
+
+test('⑤ 重複除去（同ユニットが候補に2回入らない）', () => {
+  fullReset();
+  // 1008 が center で、1008に1体いるとき重複チェック
+  const fr = mkUnit({ id:'fr1', col:10, row:8, army:'french', hits:2 });
+  units.push(fr);
+  const rallied = executeSunAusterlitz_T('1008');
+  expect(rallied.length, 'no duplicate').toBe(1);
+  expect(fr.hits, 'cleared once').toBe(0);
+});
+
+// ============================================================
+// Napoleon — The Bearskins!
+// ============================================================
+section('Napoleon — The Bearskins!');
+
+// スタンドアロン版 executeNapoleonBearskins
+function executeNapoleonBearskins_T(fixedRolls = []) {
+  let rollIdx = 0;
+  function fixedRollD6() { return fixedRolls[rollIdx++] ?? rollD6(); }
+
+  const ogUnits = units.filter(u => u.isOG && !u.battleworn && u.army === 'french');
+  const actions = [];
+  const tested = new Set();
+  const results = []; // { unitId, success }
+
+  for (const og of ogUnits) {
+    const ogAddr = hexAddr(og.col, og.row);
+    const adjEnemies = neighborAddrs(ogAddr)
+      .flatMap(n => getUnitsAt(n).filter(e =>
+        e.army !== 'french' && !e.isDetachment && !tested.has(e.id)));
+    for (const enemy of adjEnemies) {
+      tested.add(enemy.id);
+      const er = getEffectiveER(enemy);
+      const roll = fixedRollD6();
+      const success = roll <= er;
+      results.push({ unitId: enemy.id, success, roll });
+      if (!success) {
+        doRetreat(enemy, 1);
+      }
+    }
+  }
+  return results;
+}
+
+test('① OGユニット隣接の敵がElan Test（失敗で後退）', () => {
+  fullReset();
+  const og    = mkUnit({ id:'og1', col:10, row:10, army:'french', type:'infantry', isOG:true, battleworn:false });
+  const enemy = mkUnit({ id:'al1', col:9,  row:10, army:'allied',  type:'infantry', er:4,      hits:0 });
+  units.push(og, enemy);
+  // 0910 は 1010 の隣接? neighbors(10,10) = 1111,1110,1009,0910,0911,1011 → 0910あり
+  const results = executeNapoleonBearskins_T([5]); // roll=5>ER4 → fail
+  expect(results.length, '1 test performed').toBe(1);
+  expect(!results[0].success, 'failed').toBeTrue();
+  // enemy は後退済み
+  expect(hexAddr(enemy.col, enemy.row) !== '0910', 'enemy retreated').toBeTrue();
+});
+
+test('② OG Battlewornは対象外', () => {
+  fullReset();
+  const og    = mkUnit({ id:'og1', col:10, row:10, army:'french', type:'infantry', isOG:true, battleworn:true });
+  const enemy = mkUnit({ id:'al1', col:9,  row:10, army:'allied',  type:'infantry', er:4, hits:0 });
+  units.push(og, enemy);
+  const results = executeNapoleonBearskins_T([5]);
+  expect(results.length, 'BW OG skipped').toBe(0);
+});
+
+test('③ Detachmentユニットは除外', () => {
+  fullReset();
+  const og  = mkUnit({ id:'og1', col:10, row:10, army:'french', type:'infantry', isOG:true, battleworn:false });
+  const det = mkUnit({ id:'det1', col:9, row:10, army:'allied',  type:'infantry', er:4, hits:0, isDetachment:true });
+  units.push(og, det);
+  const results = executeNapoleonBearskins_T([5]);
+  expect(results.length, 'detachment excluded').toBe(0);
+});
+
+test('④ 2つのOGが同じ敵に隣接しても1回のみTest', () => {
+  fullReset();
+  // OG1=1010, OG2=1110 → 共通隣接: 1111
+  const og1   = mkUnit({ id:'og1', col:10, row:10, army:'french', type:'infantry', isOG:true, battleworn:false });
+  const og2   = mkUnit({ id:'og2', col:11, row:10, army:'french', type:'infantry', isOG:true, battleworn:false });
+  const enemy = mkUnit({ id:'al1', col:11, row:11, army:'allied',  type:'infantry', er:4, hits:0 }); // 1111
+  units.push(og1, og2, enemy);
+  const results = executeNapoleonBearskins_T([3, 3]); // 余分なロールを準備しても
+  expect(results.length, 'shared enemy tested once').toBe(1);
+});
+
+test('⑤ OGなし → テスト0件', () => {
+  fullReset();
+  const inf = mkUnit({ id:'fr1', col:10, row:10, army:'french', type:'infantry' });
+  units.push(inf);
+  const results = executeNapoleonBearskins_T([]);
+  expect(results.length, 'no OG = no tests').toBe(0);
+});
+
+// ============================================================
+// Napoleon — removeNapoleonMarker（chit-pull.js）
+// ============================================================
+section('Napoleon — removeNapoleonMarker（4段階フォールスルー）');
+
+function makeCPS_napoleon() {
+  return {
+    turn: 1,
+    heldNapoleon: [],
+    discarded: [],
+    cup: [],
+    log: [],
+    _log(m) { this.log.push(m); },
+    removeNapoleonMarker() {
+      if (this.heldNapoleon.length > 0) {
+        const m = this.heldNapoleon.splice(0,1)[0];
+        this.discarded.push(m);
+        this._log('held removed');
+        return { ok:true, source:'held' };
+      }
+      const di = this.discarded.findIndex(m => m.type === 'napoleon');
+      if (di >= 0) {
+        this.discarded.splice(di,1);
+        this._log('discarded removed');
+        return { ok:true, source:'discarded' };
+      }
+      const ci = this.cup.findIndex(m => m.type === 'napoleon');
+      if (ci >= 0) {
+        this.cup.splice(ci,1);
+        this._log('cup removed');
+        return { ok:true, source:'cup' };
+      }
+      this.cup.push({ id:'napoleon-1', type:'napoleon', label:'Napoleon', sub:'Le Petit Caporal', color:'#ffd700' });
+      this._log('recovery');
+      return { ok:true, source:'recovery' };
+    },
+  };
+}
+
+test('① 保持中マーカーを優先除去', () => {
+  const cps = makeCPS_napoleon();
+  cps.heldNapoleon.push({ id:'napoleon-1', type:'napoleon', label:'Napoleon' });
+  cps.cup.push({ id:'napoleon-2', type:'napoleon', label:'Napoleon' });
+  const r = cps.removeNapoleonMarker();
+  expect(r.source, 'from held').toBe('held');
+  expect(cps.heldNapoleon.length, 'held empty').toBe(0);
+  expect(cps.cup.length, 'cup unchanged').toBe(1);
+});
+
+test('② 保持なし → discardedから除去', () => {
+  const cps = makeCPS_napoleon();
+  cps.discarded.push({ id:'napoleon-1', type:'napoleon', label:'Napoleon' });
+  const r = cps.removeNapoleonMarker();
+  expect(r.source, 'from discarded').toBe('discarded');
+  expect(cps.discarded.length, 'discarded empty').toBe(0);
+});
+
+test('③ held/discardedなし → cupから除去', () => {
+  const cps = makeCPS_napoleon();
+  cps.cup.push({ id:'napoleon-1', type:'napoleon', label:'Napoleon' });
+  const r = cps.removeNapoleonMarker();
+  expect(r.source, 'from cup').toBe('cup');
+  expect(cps.cup.length, 'cup empty').toBe(0);
+});
+
+test('④ 全消滅済み → recovery（1枚カップ復活）', () => {
+  const cps = makeCPS_napoleon();
+  const r = cps.removeNapoleonMarker();
+  expect(r.source, 'recovery').toBe('recovery');
+  expect(cps.cup.length, 'one in cup').toBe(1);
+  expect(cps.cup[0].type, 'napoleon type').toBe('napoleon');
 });
 
 // ============================================================
