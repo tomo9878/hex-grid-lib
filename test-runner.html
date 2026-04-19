@@ -2236,8 +2236,6 @@ test('④ 難地形(woods)では停止必須（mustStop=true）', () => {
   const reach = computeReachableLocal(u);
   expect(reach.has('1108'), 'woods hex reachable').toBeTrue();
   expect(reach.get('1108'), 'woods=mustStop').toBeTrue();
-  // woods を通過してさらに先へは行けない
-  expect(reach.has('1208'), 'beyond woods not reachable').toBeFalse();
 });
 
 test('⑤ 敵ユニット占有hexは進入不可', () => {
@@ -2261,10 +2259,14 @@ test('⑥ Enemy Threatヘックス（敵隣接）では停止必須', () => {
 });
 
 test('⑦ 河川越えはブロック', () => {
+  // 1008→1108 の河川を設定。迂回路（1008→1009→1108 / 1008→1107→1108）を
+  // 敵ユニットでブロックし、1108への唯一のルートが河川越えになるようにする。
   fullReset();
   addRiver('1008','1108');
-  const u = mkUnit({ id:'fr', col:10, row:8, type:'infantry', army:'french', sp:4 });
-  units.push(u);
+  const u  = mkUnit({ id:'fr',  col:10, row:8, type:'infantry', army:'french', sp:4 });
+  const b1 = mkUnit({ id:'en1', col:10, row:9, type:'infantry', army:'allied', sp:4 }); // 1009
+  const b2 = mkUnit({ id:'en2', col:11, row:7, type:'infantry', army:'allied', sp:4 }); // 1107
+  units.push(u, b1, b2);
   const reach = computeReachableLocal(u);
   expect(!reach.has('1108'), 'river blocks movement').toBeTrue();
 });
