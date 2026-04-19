@@ -104,7 +104,7 @@ function addRiver(a, b) {
 // ============================================================
 let units = [];
 
-function getUnitsAt(addr) { return units.filter(u => hexAddr(u.col, u.row) === addr); }
+function getUnitsAt(addr) { return units.filter(u => !u.offMap && hexAddr(u.col, u.row) === addr); }
 function canLandAt(addr, movingUnit) {
   const occupants = getUnitsAt(addr).filter(u => u.id !== movingUnit.id);
   const friendly  = occupants.filter(u => u.army === movingUnit.army);
@@ -541,6 +541,7 @@ function mkUnit(overrides) {
     id:'u', col:10, row:8, type:'infantry', army:'french',
     sp:4, af:0, er:4, hits:0, battleworn:false,
     isHeavyArtillery:false, isDetachment:false, small:false,
+    offMap: false,
   }, overrides);
 }
 
@@ -2647,6 +2648,392 @@ test('④ 全消滅済み → recovery（1枚カップ復活）', () => {
   expect(r.source, 'recovery').toBe('recovery');
   expect(cps.cup.length, 'one in cup').toBe(1);
   expect(cps.cup[0].type, 'napoleon type').toBe('napoleon');
+});
+
+// ============================================================
+// プロイセン到着 — getUnitsAt offMap除外
+// ============================================================
+section('プロイセン到着 — getUnitsAt offMap除外');
+
+test('① offMap=true のユニットは getUnitsAt に出ない', () => {
+  fullReset();
+  const u = mkUnit({ id:'pr1', col:11, row:8, army:'prussian', offMap: true });
+  units.push(u);
+  expect(getUnitsAt('1108').length, 'excluded from getUnitsAt').toBe(0);
+});
+
+test('② offMap=false のユニットは getUnitsAt に出る', () => {
+  fullReset();
+  const u = mkUnit({ id:'pr1', col:11, row:8, army:'prussian', offMap: false });
+  units.push(u);
+  expect(getUnitsAt('1108').length, 'included in getUnitsAt').toBe(1);
+});
+
+test('③ offMap=true は canLandAt 判定に影響しない（空扱い）', () => {
+  fullReset();
+  // offMap ユニットが同じhexにいても "占有なし" 扱い
+  const ghost  = mkUnit({ id:'ghost', col:11, row:8, army:'prussian', offMap: true, small: false });
+  const mover  = mkUnit({ id:'mover', col:10, row:8, army:'prussian', offMap: false, small: false });
+  units.push(ghost, mover);
+  expect(canLandAt('1108', mover), 'offMap ghost does not block').toBeTrue();
+});
+
+// ============================================================
+// プロイセン到着 — getOffMapUnits / deploymentOrder
+// ============================================================
+section('プロイセン到着 — getOffMapUnits / deploymentOrder');
+
+// スタンドアロン実装
+const PRUSSIAN_CORPS_CONFIG_T = {
+  'pr-IV': { entryAddr: '2011', targetAddr: '1512', label: 'Bülow IV Corps' },
+  'pr-II': { entryAddr: '2009', targetAddr: '1512', label: 'Pirch I II Corps' },
+  'pr-I':  { entryAddr: '2003', targetAddr: '1607', label: 'Ziethen I Corps' },
+};
+
+function getOffMapUnits_T(corpId) {
+  return units.filter(u => u.army === 'prussian' && u.corps === corpId && u.offMap);
+}
+function deploymentOrder_T(unit) {
+  if (unit.type === 'HC' || unit.type === 'LC') return 0;
+  if (unit.type === 'infantry') return 1;
+  return 2;
+}
+
+test('① getOffMapUnits: corps IDで絞り込み', () => {
+  fullReset();
+  units.push(
+    mkUnit({ id:'cav', army:'prussian', corps:'pr-IV', offMap:true, type:'HC' }),
+    mkUnit({ id:'inf', army:'prussian', corps:'pr-IV', offMap:true, type:'infantry' }),
+    mkUnit({ id:'art', army:'prussian', corps:'pr-II', offMap:true, type:'artillery' }),
+  );
+  expect(getOffMapUnits_T('pr-IV').length, 'pr-IV: 2 units').toBe(2);
+  expect(getOffMapUnits_T('pr-II').length, 'pr-II: 1 unit').toBe(1);
+  expect(getOffMapUnits_T('pr-I').length,  'pr-I: 0 units').toBe(0);
+});
+
+test('② offMap=false ユニットは含まれない', () => {
+  fullReset();
+  units.push(
+    mkUnit({ id:'on',  army:'prussian', corps:'pr-IV', offMap:false, type:'infantry' }),
+    mkUnit({ id:'off', army:'prussian', corps:'pr-IV', offMap:true,  type:'infantry' }),
+  );
+  const result = getOffMapUnits_T('pr-IV');
+  expect(result.length, 'only offMap=true').toBe(1);
+  expect(result[0].id, 'correct unit').toBe('off');
+});
+
+test('③ deploymentOrder: 騎兵=0, 歩兵=1, 砲兵=2', () => {
+  expect(deploymentOrder_T(mkUnit({ type:'HC' })),        'HC=0').toBe(0);
+  expect(deploymentOrder_T(mkUnit({ type:'LC' })),        'LC=0').toBe(0);
+  expect(deploymentOrder_T(mkUnit({ type:'infantry' })),  'inf=1').toBe(1);
+  expect(deploymentOrder_T(mkUnit({ type:'artillery' })), 'art=2').toBe(2);
+});
+
+test('④ ソート後: 騎兵→歩兵→砲兵の順', () => {
+  fullReset();
+  units.push(
+    mkUnit({ id:'art', army:'prussian', corps:'pr-IV', offMap:true, type:'artillery' }),
+    mkUnit({ id:'inf', army:'prussian', corps:'pr-IV', offMap:true, type:'infantry' }),
+    mkUnit({ id:'cav', army:'prussian', corps:'pr-IV', offMap:true, type:'HC' }),
+  );
+  const sorted = getOffMapUnits_T('pr-IV').sort((a,b) => deploymentOrder_T(a)-deploymentOrder_T(b));
+  expect(sorted[0].id, 'first=cavalry').toBe('cav');
+  expect(sorted[1].id, 'second=infantry').toBe('inf');
+  expect(sorted[2].id, 'third=artillery').toBe('art');
+});
+
+// ============================================================
+// プロイセン到着 — delayedEntryHex
+// ============================================================
+section('プロイセン到着 — delayedEntryHex');
+
+function delayedEntryHex_T(corpId) {
+  const { entryAddr } = PRUSSIAN_CORPS_CONFIG_T[corpId];
+  const entryCol = parseInt(entryAddr.slice(0, 2), 10);
+  const entryRow = parseInt(entryAddr.slice(2),    10);
+  for (let d = 1; d < 15; d++) {
+    for (const sign of [-1, 1]) {
+      const r = entryRow + sign * d;
+      if (r < 1 || r > 14) continue;
+      const addr = hexAddr(entryCol, r);
+      if (getUnitsAt(addr).length === 0) return addr;
+    }
+  }
+  return null;
+}
+
+test('① entry hex 付近が空 → 北側最近hex（row-1）を返す', () => {
+  fullReset();
+  // entry 2011(col=20,row=11) の row=10 が空
+  const alt = delayedEntryHex_T('pr-IV');
+  // 北側(row=10)が空なら 2010
+  expect(alt, 'nearest north empty').toBe('2010');
+});
+
+test('② 北側が塞がれていたら南側を返す', () => {
+  fullReset();
+  // row=10(北),row=12(南)を埋めて、row=9が次
+  const block10 = mkUnit({ id:'b1', col:20, row:10, army:'allied', offMap:false });
+  units.push(block10);
+  const alt = delayedEntryHex_T('pr-IV');
+  // d=1: north=row=10(blocked), south=row=12 → first south available
+  expect(alt, 'south fallback').toBe('2012');
+});
+
+test('③ entry hex 自体はブロックされていない場合（delayedEntryHexはentryの隣を探す）', () => {
+  fullReset();
+  // entry 2011(row=11)自体は除外 → d=1から探す
+  const alt = delayedEntryHex_T('pr-II'); // entry 2009
+  expect(alt, 'pr-II: nearest = 2008').toBe('2008');
+});
+
+// ============================================================
+// プロイセン到着 — deployPrussianCorps ロジック（同期テスト版）
+// ============================================================
+section('プロイセン到着 — deployPrussianCorps（同期ロジック）');
+
+// DOM/setTimeout なしの同期版展開ロジック
+let prussianDeployed_T = false;
+
+function isOnRoad_T() { return false; }
+
+function computeReachableLocal_PR(unit) {
+  const MA = (() => {
+    if (unit.type === 'HC') return 3;
+    if (unit.type === 'LC') return 4;
+    return 2;
+  })();
+  const startAddr = hexAddr(unit.col, unit.row);
+  const costMap = new Map([[startAddr, 0]]);
+  const queue   = [{ addr: startAddr, cost: 0 }];
+  const result  = new Map();
+  while (queue.length > 0) {
+    const { addr, cost } = queue.shift();
+    for (const nAddr of neighborAddrs(addr)) {
+      if (isRiverCrossing(addr, nAddr)) continue;
+      if (getUnitsAt(nAddr).some(u => u.army !== unit.army)) continue;
+      const moveCost = (isRidge(nAddr) && !isRidge(addr)) ? 2 : 1;
+      const newCost  = cost + moveCost;
+      if (newCost > MA) continue;
+      if ((costMap.get(nAddr) ?? Infinity) <= newCost) continue;
+      costMap.set(nAddr, newCost);
+      const isDifficult = (isWoods(nAddr) || isBuildings(nAddr)) && !isOnRoad_T(addr, nAddr);
+      const hasEnemyAdj = isEnemyAdjacentTo(nAddr, unit.army);
+      const mustStop    = isDifficult || hasEnemyAdj;
+      if (canLandAt(nAddr, unit)) result.set(nAddr, mustStop);
+      if (!mustStop) queue.push({ addr: nAddr, cost: newCost });
+    }
+  }
+  return result;
+}
+
+function moveTowardTarget_PR(unit, targetAddr) {
+  const reachable = computeReachableLocal_PR(unit);
+  if (reachable.size === 0) return null;
+  let candidates = [...reachable.keys()];
+  candidates.sort((a, b) => hexDistance(a, targetAddr) - hexDistance(b, targetAddr));
+  const minD = hexDistance(candidates[0], targetAddr);
+  candidates = candidates.filter(a => hexDistance(a, targetAddr) === minD);
+  const chosen = candidates[0];
+  if (!chosen || chosen === hexAddr(unit.col, unit.row)) return null;
+  unit.col = parseInt(chosen.slice(0, 2), 10);
+  unit.row = parseInt(chosen.slice(2),    10);
+  return chosen;
+}
+
+function placePrussianUnit_T(unit, addr) {
+  unit.offMap = false;
+  unit.col    = parseInt(addr.slice(0, 2), 10);
+  unit.row    = parseInt(addr.slice(2),    10);
+  prussianDeployed_T = true;
+}
+
+function deployCorpsSync_T(corpId) {
+  const cfg     = PRUSSIAN_CORPS_CONFIG_T[corpId];
+  const offMap  = units
+    .filter(u => u.army === 'prussian' && u.corps === corpId && u.offMap)
+    .sort((a, b) => deploymentOrder_T(a) - deploymentOrder_T(b));
+  const log = [];
+  for (const u of offMap) {
+    let landAddr = cfg.entryAddr;
+    if (!canLandAt(landAddr, u)) {
+      const alt = delayedEntryHex_T(corpId);
+      if (alt) { landAddr = alt; log.push(`delayed:${u.id}→${alt}`); }
+      else      { log.push(`skipped:${u.id}`); continue; }
+    }
+    placePrussianUnit_T(u, landAddr);
+    const moved = moveTowardTarget_PR(u, cfg.targetAddr);
+    log.push(`placed:${u.id}@${hexAddr(u.col,u.row)}${moved?'(moved)':'(stayed)'}`);
+  }
+  return log;
+}
+
+test('① 空 entry hex → ユニット配置・offMap=false', () => {
+  fullReset();
+  prussianDeployed_T = false;
+  const u = mkUnit({ id:'pr1', army:'prussian', corps:'pr-IV', offMap:true, type:'infantry',
+                     col:20, row:11, sp:4, af:1, er:4 });
+  units.push(u);
+  deployCorpsSync_T('pr-IV');
+  expect(u.offMap, 'offMap cleared').toBeFalse();
+  expect(prussianDeployed_T, 'prussianDeployed set').toBeTrue();
+});
+
+test('② entry hex に味方が1体（large）→ 展開不可 → delayedEntryHex を使用', () => {
+  fullReset();
+  // entry 2011 に既存プロイセン large ユニット
+  const existing = mkUnit({ id:'ex1', col:20, row:11, army:'prussian', offMap:false, small:false });
+  const newUnit  = mkUnit({ id:'pr1', army:'prussian', corps:'pr-IV', offMap:true, type:'infantry',
+                            col:20, row:11, small:false });
+  units.push(existing, newUnit);
+  const log = deployCorpsSync_T('pr-IV');
+  // canLandAt('2011', newUnit) = false (large+large), so delayedEntryHex → 2010
+  expect(newUnit.offMap, 'placed via delayed entry').toBeFalse();
+  expect(log.some(l => l.includes('delayed')), 'delayed entry logged').toBeTrue();
+});
+
+test('③ フランスが entry hex に → Delayed Entry', () => {
+  fullReset();
+  const french = mkUnit({ id:'fr1', col:20, row:11, army:'french', offMap:false, small:false });
+  const pr     = mkUnit({ id:'pr1', army:'prussian', corps:'pr-IV', offMap:true, type:'infantry',
+                          col:20, row:11, small:false });
+  units.push(french, pr);
+  // フランスがいるので canLandAt('2011', pr) = false → delayed entry
+  const log = deployCorpsSync_T('pr-IV');
+  expect(pr.offMap, 'deployed via delayed entry').toBeFalse();
+  // 配置先は entry hex ではない
+  expect(hexAddr(pr.col, pr.row), 'not at entry hex').not.toBe('2011');
+});
+
+test('④ entry hex から目標方向へ移動している', () => {
+  fullReset();
+  // entry 2011(col=20,row=11), target 1512(col=15,row=12)
+  // 配置後に moveTowardTarget が動くので col が 20 より小さくなるはず
+  const pr = mkUnit({ id:'pr1', army:'prussian', corps:'pr-IV', offMap:true, type:'HC',
+                      col:20, row:11, sp:4, af:0, er:4 });
+  units.push(pr);
+  deployCorpsSync_T('pr-IV');
+  expect(pr.col < 20, 'moved west from entry').toBeTrue();
+});
+
+// ============================================================
+// プロイセン到着 — handleOffMapEntry（Delayed Entry）
+// ============================================================
+section('プロイセン到着 — handleOffMapEntry Delayed Entry');
+
+function handleOffMapEntrySync_T(corpId) {
+  const cfg    = PRUSSIAN_CORPS_CONFIG_T[corpId];
+  const offMap = units
+    .filter(u => u.army === 'prussian' && u.corps === corpId && u.offMap)
+    .sort((a, b) => deploymentOrder_T(a) - deploymentOrder_T(b));
+  const log = [];
+  for (const u of offMap) {
+    const hasFrench = getUnitsAt(cfg.entryAddr).some(v => v.army === 'french');
+    let landAddr = cfg.entryAddr;
+    if (hasFrench || !canLandAt(cfg.entryAddr, u)) {
+      const alt = delayedEntryHex_T(corpId);
+      if (alt) { landAddr = alt; log.push(`delayed:${u.id}→${alt}`); }
+      else      { log.push(`waiting:${u.id}`); continue; }
+    }
+    placePrussianUnit_T(u, landAddr);
+    moveTowardTarget_PR(u, cfg.targetAddr);
+    log.push(`entry:${u.id}@${hexAddr(u.col,u.row)}`);
+  }
+  return log;
+}
+
+test('① offMap 0体 → 何もしない', () => {
+  fullReset();
+  const log = handleOffMapEntrySync_T('pr-IV');
+  expect(log.length, 'no action').toBe(0);
+});
+
+test('② フランス不在 → entry hex に配置', () => {
+  fullReset();
+  const pr = mkUnit({ id:'pr1', army:'prussian', corps:'pr-II', offMap:true, type:'infantry',
+                      col:20, row:9, small:false });
+  units.push(pr);
+  handleOffMapEntrySync_T('pr-II');
+  expect(pr.offMap, 'deployed').toBeFalse();
+});
+
+test('③ フランスが entry hex に → Delayed Entry hex に配置', () => {
+  fullReset();
+  const fr = mkUnit({ id:'fr', col:20, row:9, army:'french', offMap:false, small:false }); // 2009
+  const pr = mkUnit({ id:'pr', army:'prussian', corps:'pr-II', offMap:true, type:'infantry',
+                      col:20, row:9, small:false });
+  units.push(fr, pr);
+  const log = handleOffMapEntrySync_T('pr-II');
+  expect(pr.offMap, 'deployed despite French').toBeFalse();
+  expect(log.some(l => l.includes('delayed')), 'delayed entry used').toBeTrue();
+  expect(hexAddr(pr.col, pr.row), 'not entry hex').not.toBe('2009');
+});
+
+// ============================================================
+// プロイセン到着 — chit-pull.js _checkTRT → endTurn arrivedCorps
+// ============================================================
+section('chit-pull.js — endTurn arrivedCorps');
+
+function makeCPS_trt() {
+  return {
+    turn: 9,
+    cup: [],
+    trtMarkers: [
+      { id:'pr-IV', type:'prussian', label:'IV Corps', sub:'Bülow',   trtTurn:10 },
+      { id:'pr-II', type:'prussian', label:'II Corps', sub:'Pirch I', trtTurn:11 },
+    ],
+    log: [],
+    _log(m) { this.log.push(m); },
+    _checkTRT() {
+      const arrived = this.trtMarkers.filter(m => m.trtTurn <= this.turn);
+      this.trtMarkers = this.trtMarkers.filter(m => m.trtTurn > this.turn);
+      for (const m of arrived) {
+        this.cup.push({ ...m });
+        this._log(`arrived: ${m.label}`);
+      }
+      return arrived;
+    },
+    endTurn() {
+      if (this.turn >= 12) return { ok:true, gameOver:true, arrivedCorps:[] };
+      this.turn++;
+      const arrivedCorps = this._checkTRT();
+      return { ok:true, turn:this.turn, arrivedCorps };
+    },
+  };
+}
+
+test('① T9→T10: IV Corps TRT到着 → arrivedCorps に含まれる', () => {
+  const cps = makeCPS_trt();
+  const r = cps.endTurn();
+  expect(r.turn, 'turn incremented').toBe(10);
+  expect(r.arrivedCorps.length, 'one corps arrived').toBe(1);
+  expect(r.arrivedCorps[0].id, 'IV Corps').toBe('pr-IV');
+  expect(cps.trtMarkers.length, 'pr-II still in TRT').toBe(1);
+});
+
+test('② T10→T11: II Corps 到着', () => {
+  const cps = makeCPS_trt();
+  cps.endTurn(); // T10
+  const r = cps.endTurn(); // T11
+  expect(r.arrivedCorps.length, 'II Corps arrives').toBe(1);
+  expect(r.arrivedCorps[0].id, 'pr-II').toBe('pr-II');
+  expect(cps.trtMarkers.length, 'TRT empty').toBe(0);
+});
+
+test('③ 到着なしのターンは arrivedCorps が空配列', () => {
+  const cps = makeCPS_trt();
+  // T9→T10 は pr-IV 到着、T10→T11 は pr-II 到着
+  // T11→T12: TRT空なので空配列
+  cps.endTurn(); cps.endTurn();
+  const r = cps.endTurn();
+  expect(r.arrivedCorps.length, 'no arrivals').toBe(0);
+});
+
+test('④ 到着コープスはカップに追加される', () => {
+  const cps = makeCPS_trt();
+  cps.endTurn();
+  expect(cps.cup.length, 'pr-IV in cup').toBe(1);
+  expect(cps.cup[0].id, 'cup has pr-IV').toBe('pr-IV');
 });
 
 // ============================================================
