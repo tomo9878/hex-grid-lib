@@ -357,6 +357,30 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
 .tp-btn:hover { background: #3a2000; }
 .tp-desc { font-size: 10px; color: #888; line-height: 1.4; }
 
+/* ---- Deployment zone highlight ---- */
+.hex-deploy { fill: rgba(0,200,80,0.22); stroke: #00c850; stroke-width: 2.5; opacity: 1; }
+
+/* ---- Rainy Start / Deployment sections ---- */
+#rainy-start-section, #deployment-section { }
+#rainy-turn-info   { font-size: 13px; font-weight: bold; color: #ccc; padding: 4px 0 2px; }
+#rainy-modifier-info { font-size: 11px; color: #888; margin-bottom: 4px; }
+#rainy-log { font-size: 11px; max-height: 90px; overflow-y: auto; margin-top: 4px; }
+.rainy-log-entry { padding: 1px 0; line-height: 1.5; }
+.rainy-log-entry.success { color: #0f0; }
+.rainy-log-entry.fail    { color: #666; }
+#deploy-progress { font-size: 12px; color: #aaa; padding: 4px 0 8px; }
+.deploy-unit-card {
+  border-radius: 5px; padding: 6px 9px; margin-bottom: 4px;
+  border-left: 3px solid #5bb5ff; background: rgba(91,181,255,.08);
+  cursor: pointer; transition: background .15s;
+}
+.deploy-unit-card:hover  { background: rgba(91,181,255,.15); }
+.deploy-unit-card.selected { background: rgba(255,215,0,.15); border-color: #ffd700; }
+.deploy-unit-card.deployed { opacity: .4; cursor: default; border-color: #444; background: rgba(255,255,255,.03); }
+.deploy-unit-card .du-name   { font-size: 12px; font-weight: bold; color: #ccc; }
+.deploy-unit-card .du-info   { font-size: 10px; color: #888; }
+.deploy-unit-card .du-placed { font-size: 10px; color: #0f0; }
+
 /* ---- Close Combat Modal ---- */
 #melee-modal {
   position: fixed; inset: 0; z-index: 50;
@@ -466,6 +490,25 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
   <!-- メインコンテンツ -->
   <div id="chit-body">
 
+    <!-- ============ Rainy Start Section ============ -->
+    <div id="rainy-start-section">
+      <div class="cp-section">会戦開始判定（Rainy Start）</div>
+      <div id="rainy-turn-info">ターン 1 — 開始判定ロール</div>
+      <div id="rainy-modifier-info">1d6+0 ≥ 5 で会戦開始</div>
+      <div id="rainy-log"></div>
+    </div>
+
+    <!-- ============ Deployment Section ============ -->
+    <div id="deployment-section" style="display:none">
+      <div class="cp-section">フランス軍配置フェーズ</div>
+      <div id="deploy-progress">0 / 0 配置完了</div>
+      <div style="font-size:10px;color:#555;margin-bottom:6px">ユニットを選択 → ヘックスをクリックで配置</div>
+      <div id="deploy-unit-list"></div>
+    </div>
+
+    <!-- ============ Battle Phase Content ============ -->
+    <div id="battle-section" style="display:none">
+
     <!-- カップ残り -->
     <div class="cp-section">カップ</div>
     <div id="cup-count-bar">
@@ -533,13 +576,16 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
     <div id="chit-log"></div>
 
     <div style="height:10px"></div>
+    </div><!-- /#battle-section -->
   </div><!-- /#chit-body -->
 
   <!-- フッター -->
   <div id="chit-footer">
-    <button id="btn-draw"    class="btn btn-primary btn-lg">🎲 マーカーを引く</button>
-    <button id="btn-endturn" class="btn btn-neutral btn-lg">ターン終了 →</button>
-    <button id="btn-check-vp" class="btn btn-neutral" style="width:100%;margin-top:4px;font-size:11px">現在のVP確認</button>
+    <button id="btn-rainy-roll"      class="btn btn-warn    btn-lg">🎲 開始判定ロール</button>
+    <button id="btn-deploy-complete" class="btn btn-primary btn-lg" style="display:none" disabled>✅ 配置完了</button>
+    <button id="btn-draw"    class="btn btn-primary btn-lg" style="display:none">🎲 マーカーを引く</button>
+    <button id="btn-endturn" class="btn btn-neutral btn-lg" style="display:none">ターン終了 →</button>
+    <button id="btn-check-vp" class="btn btn-neutral" style="width:100%;margin-top:4px;font-size:11px;display:none">現在のVP確認</button>
   </div>
 </div>
 
@@ -1106,6 +1152,14 @@ let reverseSlope   = false;  // Reverse Slope Deployment
 let thinRedLine    = false;  // The Thin Red Line
 let scumOfTheEarth = false;  // Scum of the Earth
 
+// ============================================================
+// ゲームフェーズ
+// ============================================================
+let gamePhase = 'rainy-start'; // 'rainy-start' | 'deployment' | 'battle'
+let deployingUnitId = null;          // deployment phase: selected unit id
+const deployZoneHexes = new Set();   // deployment phase: valid hexes for selected unit
+const rainyLog = [];                 // rainy start roll log
+
 // Napoleon Action State
 let napoleonMode      = null;   // null | 'sun-austerlitz' | 'vive-lempereur' | 'grand-battery'
 let napoleonModeIdx   = -1;     // heldNapoleon index being used in interactive mode
@@ -1242,6 +1296,7 @@ function onMouseMove(e) {
 }
 
 function isHighlighted(addr) {
+  if (gamePhase === 'deployment' && deployZoneHexes.has(addr)) return true;
   if (!selectedUnitId) return false;
   const unit = units.find(u => u.id === selectedUnitId);
   if (!unit) return false;
@@ -1253,6 +1308,18 @@ function isHighlighted(addr) {
 
 function onMouseClick(e) {
   if (e.button !== 0) return;
+
+  // Deployment phase: place selected unit on a valid hex
+  if (gamePhase === 'deployment') {
+    const h = getHexAt(e.clientX, e.clientY);
+    if (deployingUnitId && h && deployZoneHexes.has(h.addr)) {
+      const unit = units.find(u => u.id === deployingUnitId);
+      if (unit) deployUnit(unit, h.addr);
+    } else {
+      selectDeployUnit(null);
+    }
+    return;
+  }
 
   // Napoleon interactive mode: hex/unit selection
   if (napoleonMode) {
@@ -1551,6 +1618,8 @@ function refreshHighlights() {
       setHexClass(addr, 'hex-melee');
     } else if (!bombardMode && !meleeMode && reachableMap.has(addr)) {
       setHexClass(addr, reachableMap.get(addr) ? 'hex-stop' : 'hex-reachable');
+    } else if (gamePhase === 'deployment' && deployZoneHexes.has(addr)) {
+      setHexClass(addr, 'hex-deploy');
     } else {
       setHexClass(addr, addr === lastHoverAddr ? 'hex-hover' : 'hex-normal');
     }
@@ -4590,6 +4659,12 @@ window.addEventListener('keydown', e => {
 function init() {
   const W = mapImg.naturalWidth, H = mapImg.naturalHeight;
   setupSVG(W, H);
+
+  // Rainy Start: フランス軍（Grouchy variant以外）はDeployment Phaseまでオフマップ
+  for (const u of units) {
+    if (u.army === 'french' && !u.offMap) u.offMap = true;
+  }
+
   drawAllUnits();
 
   // 初期パン: マップ中央が画面中央に来るように
@@ -5005,12 +5080,233 @@ document.getElementById('btn-check-vp').addEventListener('click', () => {
   showEndGameModal(total, getVictoryLevel(total), rows);
 });
 
+// ============================================================
+// ゲームフェーズ管理 — Rainy Start / Deployment
+// ============================================================
+
+const DEPLOY_ZONES = {
+  'I':    { center: '1309', radius: 3 },
+  'II':   { center: '0611', radius: 3 },
+  'VI':   { center: '1111', radius: 1 },
+  'IIIC': { center: '0511', radius: 2 },
+  'IVC':  { center: '1411', radius: 2 },
+};
+
+function getDeploymentZone(unit) {
+  if (unit.corps === 'IG') {
+    if (unit.id === 'guyot_IG')       return { center: '0512', radius: 2 };
+    if (unit.id === 'lefeb-desno_IG') return { center: '1511', radius: 2 };
+    return { center: '1013', radius: 1 };
+  }
+  return DEPLOY_ZONES[unit.corps] || { center: '1309', radius: 2 };
+}
+
+function getFrenchDeployUnits() {
+  // Grouchy variant units (offMap at game start and not to be deployed)
+  const GROUCHY_IDS = new Set([
+    'hulot_IV','vichery_IV','pecheux_IV','baltus_IV',
+    'chastel_IIC','strolz_IIC','maurin_IC','soult_IC',
+  ]);
+  return units.filter(u => u.army === 'french' && !GROUCHY_IDS.has(u.id));
+}
+
+function computeDeployableHexes(unit) {
+  const zone = getDeploymentZone(unit);
+  const result = new Set();
+  for (let c = 1; c <= GRID_COLS; c++) {
+    for (let r = 1; r <= GRID_ROWS; r++) {
+      const addr = hexAddr(c, r);
+      if (hexDistance(addr, zone.center) > zone.radius) continue;
+      // 連合軍ユニット隣接不可
+      if (neighborAddrs(addr).some(n => getUnitsAt(n).some(u => u.army === 'allied'))) continue;
+      // スタックチェック
+      const occupants = getUnitsAt(addr).filter(u => u.army === 'french');
+      if (occupants.length === 0) {
+        result.add(addr);
+      } else if (occupants.length === 1 && unit.small && occupants[0].small) {
+        result.add(addr);
+      }
+    }
+  }
+  return result;
+}
+
+function selectDeployUnit(unitId) {
+  deployingUnitId = unitId;
+  deployZoneHexes.clear();
+  if (unitId) {
+    const unit = units.find(u => u.id === unitId);
+    if (unit && unit.offMap) {
+      for (const addr of computeDeployableHexes(unit)) deployZoneHexes.add(addr);
+      setHudState(`配置中: ${unit.id.replace(/_/g,' ')} — 緑ヘックスをクリック`);
+    }
+  } else {
+    setHudState('ユニットを選択してください');
+  }
+  refreshHighlights();
+  renderDeploymentPanel();
+}
+
+function deployUnit(unit, addr) {
+  const colLabel = parseInt(addr.slice(0, 2), 10);
+  const rowLabel = parseInt(addr.slice(2), 10);
+  unit.col = colLabel;
+  unit.row = rowLabel;
+  unit.offMap = false;
+  deployingUnitId = null;
+  deployZoneHexes.clear();
+  refreshHighlights();
+  drawAllUnits();
+  renderDeploymentPanel();
+  const remaining = getFrenchDeployUnits().filter(u => u.offMap).length;
+  if (remaining === 0) {
+    document.getElementById('btn-deploy-complete').disabled = false;
+    setHudState('全ユニット配置完了！「配置完了」ボタンで会戦開始');
+  } else {
+    setHudState(`残り ${remaining} ユニット — 次のユニットを選択`);
+  }
+}
+
+function renderDeploymentPanel() {
+  const deployUnits = getFrenchDeployUnits();
+  const placed = deployUnits.filter(u => !u.offMap).length;
+  document.getElementById('deploy-progress').textContent =
+    `${placed} / ${deployUnits.length} 配置完了`;
+
+  const CORPS_ORDER = ['I','II','VI','IIIC','IVC','IG'];
+  const CORPS_LABEL = {
+    'I':'I Corps (D\'Erlon)', 'II':'II Corps (Reille)',
+    'VI':'VI Corps (Lobau)', 'IIIC':'III Cav (Kellerman)',
+    'IVC':'IV Cav (Milhaud)', 'IG':'IG (Drouot)',
+  };
+
+  const list = document.getElementById('deploy-unit-list');
+  list.innerHTML = '';
+  for (const corps of CORPS_ORDER) {
+    const corpUnits = deployUnits.filter(u => u.corps === corps);
+    if (!corpUnits.length) continue;
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin:8px 0 3px';
+    hdr.textContent = CORPS_LABEL[corps] || corps;
+    list.appendChild(hdr);
+    for (const unit of corpUnits) {
+      const zone = getDeploymentZone(unit);
+      const placed = !unit.offMap;
+      const card = document.createElement('div');
+      card.className = 'deploy-unit-card'
+        + (unit.id === deployingUnitId ? ' selected' : '')
+        + (placed ? ' deployed' : '');
+      card.innerHTML = `<div class="du-name">${unit.id.replace(/_/g,' ')}</div>`
+        + (placed
+          ? `<div class="du-placed">✓ ${hexAddr(unit.col, unit.row)}</div>`
+          : `<div class="du-info">${unit.type} · ${zone.center} ±${zone.radius}</div>`);
+      if (!placed) card.addEventListener('click', () => selectDeployUnit(unit.id));
+      list.appendChild(card);
+    }
+  }
+}
+
+function renderRainyStartPanel() {
+  const state = cps.getState();
+  const turn = state.turn;
+  const mod = turn - 1;
+  document.getElementById('rainy-turn-info').textContent =
+    `ターン ${turn} — 開始判定ロール`;
+  document.getElementById('rainy-modifier-info').textContent =
+    `1d6+${mod}≥5 で会戦開始${turn >= 5 ? '（強制開始）' : ''}`;
+  const logEl = document.getElementById('rainy-log');
+  logEl.innerHTML = '';
+  for (const e of rainyLog.slice(0, 8)) {
+    const div = document.createElement('div');
+    div.className = 'rainy-log-entry ' + (e.success ? 'success' : 'fail');
+    div.textContent = e.msg;
+    logEl.appendChild(div);
+  }
+}
+
+function rollRainyStart() {
+  const state = cps.getState();
+  const turn = state.turn;
+  const mod = turn - 1;
+  const roll = Math.ceil(Math.random() * 6);
+  const total = roll + mod;
+  const success = total >= 5 || turn >= 5;
+  const msg = turn >= 5
+    ? `Turn ${turn}: 強制開始 → 会戦開始！`
+    : `Turn ${turn}: 🎲${roll}+${mod}=${total} → ${success ? '会戦開始！' : '待機続行'}`;
+  rainyLog.unshift({ msg, success });
+  cps._log(msg);
+  if (success) {
+    startDeploymentPhase();
+  } else {
+    cps.endTurn();
+    renderChitUI(cps.getState());
+    renderRainyStartPanel();
+  }
+}
+
+function startDeploymentPhase() {
+  gamePhase = 'deployment';
+  // (French units are already offMap from init)
+  document.getElementById('rainy-start-section').style.display  = 'none';
+  document.getElementById('deployment-section').style.display   = '';
+  document.getElementById('battle-section').style.display       = 'none';
+  document.getElementById('btn-rainy-roll').style.display       = 'none';
+  document.getElementById('btn-deploy-complete').style.display  = '';
+  document.getElementById('btn-deploy-complete').disabled       = true;
+  document.getElementById('btn-draw').style.display             = 'none';
+  document.getElementById('btn-endturn').style.display          = 'none';
+  document.getElementById('btn-check-vp').style.display         = 'none';
+  renderDeploymentPanel();
+  setHudState('フランス軍配置フェーズ — ユニットを選択してください');
+}
+
+function startBattlePhase() {
+  gamePhase = 'battle';
+  deployingUnitId = null;
+  deployZoneHexes.clear();
+  document.getElementById('rainy-start-section').style.display  = 'none';
+  document.getElementById('deployment-section').style.display   = 'none';
+  document.getElementById('battle-section').style.display       = '';
+  document.getElementById('btn-rainy-roll').style.display       = 'none';
+  document.getElementById('btn-deploy-complete').style.display  = 'none';
+  document.getElementById('btn-draw').style.display             = '';
+  document.getElementById('btn-endturn').style.display          = '';
+  document.getElementById('btn-check-vp').style.display         = '';
+  refreshHighlights();
+  drawAllUnits();
+  setHudState('待機中');
+  cps._log('フランス軍配置完了 — 会戦開始！');
+  renderChitUI(cps.getState());
+}
+
+function initGamePhase() {
+  // Show rainy-start UI, hide others
+  document.getElementById('rainy-start-section').style.display  = '';
+  document.getElementById('deployment-section').style.display   = 'none';
+  document.getElementById('battle-section').style.display       = 'none';
+  document.getElementById('btn-rainy-roll').style.display       = '';
+  document.getElementById('btn-deploy-complete').style.display  = 'none';
+  document.getElementById('btn-draw').style.display             = 'none';
+  document.getElementById('btn-endturn').style.display          = 'none';
+  document.getElementById('btn-check-vp').style.display         = 'none';
+  renderRainyStartPanel();
+  setHudState('会戦開始判定待ち — 「開始判定ロール」ボタンを押してください');
+}
+
+// ---- Rainy Start button ----
+document.getElementById('btn-rainy-roll').addEventListener('click', rollRainyStart);
+
+// ---- Deploy Complete button ----
+document.getElementById('btn-deploy-complete').addEventListener('click', startBattlePhase);
+
 // ---- 初期描画 ----
 renderChitUI(cps.getState());
 renderVPPanel();
 renderConditionsPanel();
 renderNapoleonConditions();
 renderOffMapPanel();
+initGamePhase();
 
 // ============================================================
 // 地形編集 — チェックボックスUI
