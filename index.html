@@ -128,6 +128,40 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
 #roll-result-desc { font-size: 12px; color: #aaa; line-height: 1.7; white-space: pre-line; }
 #roll-modal-footer { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
 
+/* VP パネル */
+#vp-panel { font-size: 11px; }
+#vp-total-line {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 3px 0; border-bottom: 1px solid #2a2a3a; margin-bottom: 4px;
+}
+#vp-total-num { font-size: 18px; font-weight: bold; color: #ffd700; }
+#vp-level-str { font-size: 10px; color: #aaa; margin-top: 2px; }
+.vp-row { display: flex; justify-content: space-between; padding: 1px 0; color: #888; }
+.vp-row.pos { color: #6f6; }
+.vp-row.neg { color: #f88; }
+
+/* 終了モーダル */
+#endgame-modal {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0,0,0,.8);
+  display: flex; align-items: center; justify-content: center;
+}
+#endgame-modal.hidden { display: none; }
+#endgame-box {
+  background: #1a1a2e; border: 2px solid #ffd700; border-radius: 10px;
+  padding: 24px 28px; width: 400px; max-height: 85vh; overflow-y: auto;
+}
+#endgame-box h2 { font-size: 16px; color: #ffd700; margin-bottom: 4px; }
+#endgame-level { font-size: 20px; font-weight: bold; color: #fff; margin: 8px 0 16px; }
+#endgame-total { font-size: 14px; color: #ffd700; margin-bottom: 12px; }
+#endgame-breakdown { font-size: 11px; }
+.eg-section { color: #666; font-size: 10px; text-transform: uppercase;
+              letter-spacing: .06em; margin: 8px 0 3px; }
+.eg-row { display: flex; justify-content: space-between; padding: 2px 0;
+          border-bottom: 1px solid #1e1e2e; }
+.eg-row.pos { color: #6f6; }
+.eg-row.neg { color: #f88; }
+
 /* Napoleon選択モーダル */
 #napoleon-modal {
   position: fixed; inset: 0; z-index: 50;
@@ -477,6 +511,17 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
       <div style="color:#555;font-size:11px">— 全ユニット展開済み —</div>
     </div>
 
+    <!-- VP -->
+    <div class="cp-section">VP（現在）</div>
+    <div id="vp-panel">
+      <div id="vp-total-line">
+        <span id="vp-total-num">0</span>
+        <span style="color:#666;font-size:11px">VP</span>
+      </div>
+      <div id="vp-level-str">— Catastrophe —</div>
+      <div id="vp-rows"></div>
+    </div>
+
     <!-- 解決済み（今ターン） -->
     <div class="cp-section">解決済み（今ターン）</div>
     <div id="discarded-list">
@@ -494,6 +539,7 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
   <div id="chit-footer">
     <button id="btn-draw"    class="btn btn-primary btn-lg">🎲 マーカーを引く</button>
     <button id="btn-endturn" class="btn btn-neutral btn-lg">ターン終了 →</button>
+    <button id="btn-check-vp" class="btn btn-neutral" style="width:100%;margin-top:4px;font-size:11px">現在のVP確認</button>
   </div>
 </div>
 
@@ -521,6 +567,19 @@ body { background: #1a1a2e; overflow: hidden; font-family: monospace; color: #ee
     <div id="napoleon-options-list"></div>
     <div style="margin-top:10px;text-align:right">
       <button id="btn-napoleon-cancel" class="btn btn-neutral">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- 終了モーダル -->
+<div id="endgame-modal" class="hidden">
+  <div id="endgame-box">
+    <h2>ゲーム終了</h2>
+    <div id="endgame-level"></div>
+    <div id="endgame-total"></div>
+    <div id="endgame-breakdown"></div>
+    <div style="margin-top:16px;text-align:right">
+      <button id="btn-endgame-close" class="btn btn-primary">閉じる</button>
     </div>
   </div>
 </div>
@@ -951,29 +1010,55 @@ const units = [
   { id: 'papelotte_det',    col: 16, row: 7, type: 'infantry',  army: 'allied', small: true,  imageHref: 'images/papelotte_detachment_front.png',    sp: 1, af: 0, er: 3, hits: 0, battleworn: false, isHeavyArtillery: false, isDetachment: true },
 
   // ============================================================
-  // フランス軍（暫定配置・sp/af/er は実際のカウンター値で要確認）
+  // フランス軍  sp/af/er = Fresh面、bwSP/bwAF/bwER = Battleworn面
   // ============================================================
-  // I Corps (D'Erlon)
-  { id: 'quiot_I_FR',     col: 13, row: 10, type: 'infantry',  army: 'french', small: false, imageHref: 'images/quiot_I_FR_front.png',     sp: 5, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  { id: 'donzelot_I_FR',  col: 14, row: 10, type: 'infantry',  army: 'french', small: false, imageHref: 'images/donzelot_I_FR_front.png',  sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  { id: 'art_I_FR',       col: 14, row: 11, type: 'artillery', army: 'french', small: false, imageHref: 'images/art_I_FR_front.png',       sp: 0, af: 2, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  // II Corps (Reille)
-  { id: 'foy_II_FR',      col:  7, row: 11, type: 'infantry',  army: 'french', small: false, imageHref: 'images/foy_II_FR_front.png',      sp: 5, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  { id: 'bachelu_II_FR',  col:  6, row: 12, type: 'infantry',  army: 'french', small: false, imageHref: 'images/bachelu_II_FR_front.png',  sp: 4, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  { id: 'art_II_FR',      col:  7, row: 12, type: 'artillery', army: 'french', small: false, imageHref: 'images/art_II_FR_front.png',      sp: 0, af: 2, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  // VI Corps (Lobau)
-  { id: 'jeannin_VI_FR',  col: 11, row: 11, type: 'infantry',  army: 'french', small: false, imageHref: 'images/jeannin_VI_FR_front.png',  sp: 3, af: 1, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  // Cavalry Corps
-  { id: 'kellerman_FR',   col:  5, row: 11, type: 'HC',        army: 'french', small: false, imageHref: 'images/kellerman_FR_front.png',   sp: 4, af: 0, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  { id: 'milhaud_FR',     col: 15, row: 11, type: 'HC',        army: 'french', small: false, imageHref: 'images/milhaud_FR_front.png',     sp: 4, af: 0, er: 4, hits: 0, battleworn: false, isHeavyArtillery: false },
-  // Imperial Guard（IG）— Drouot
-  // OG = Old Guard (isOG: true), YG = Young Guard (isYG: true)
-  { id: 'chasseurs_IG_FR',  col: 11, row: 13, type: 'infantry',  army: 'french', small: false, imageHref: 'images/chasseurs_IG_FR_front.png',  sp: 6, af: 1, er: 6, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
-  { id: 'grenadiers_IG_FR', col: 12, row: 13, type: 'infantry',  army: 'french', small: false, imageHref: 'images/grenadiers_IG_FR_front.png', sp: 6, af: 1, er: 6, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
-  { id: 'yg_IG_FR',         col: 10, row: 12, type: 'infantry',  army: 'french', small: false, imageHref: 'images/yg_IG_FR_front.png',         sp: 4, af: 1, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false, isYG: true },
-  { id: 'guyot_IG_FR',      col:  5, row: 12, type: 'HC',        army: 'french', small: false, imageHref: 'images/guyot_IG_FR_front.png',      sp: 4, af: 0, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false },
-  { id: 'lefeb_IG_FR',      col: 15, row: 12, type: 'HC',        army: 'french', small: false, imageHref: 'images/lefeb_IG_FR_front.png',      sp: 4, af: 0, er: 5, hits: 0, battleworn: false, isHeavyArtillery: false },
-  { id: 'ha_IG_FR',         col: 13, row: 13, type: 'artillery', army: 'french', small: false, imageHref: 'images/ha_IG_FR_front.png',         sp: 0, af: 4, er: 4, hits: 0, battleworn: false, isHeavyArtillery: true  },
+  // I Corps (D'Erlon) — 1309から3ヘックス以内
+  { id: 'quiot_I',       col: 13, row:  9, type: 'infantry',  army: 'french', small: false, corps: 'I',    imageHref: 'images/quiot_I_front.png',       sp: 4, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'donzelot_I',    col: 14, row:  9, type: 'infantry',  army: 'french', small: false, corps: 'I',    imageHref: 'images/donzelot_I_front.png',    sp: 5, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'marcognet_I',   col: 13, row: 10, type: 'infantry',  army: 'french', small: false, corps: 'I',    imageHref: 'images/marcognet_I_front.png',   sp: 4, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'durutte_I',     col: 14, row: 10, type: 'infantry',  army: 'french', small: false, corps: 'I',    imageHref: 'images/durutte_I_front.png',     sp: 4, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'jaquinot_I',    col: 13, row: 11, type: 'LC',        army: 'french', small: false, corps: 'I',    imageHref: 'images/jaquinot_I_front.png',    sp: 3, af: 1, er: 5, bwSP: 2, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'deSalles_I',    col: 12, row:  9, type: 'artillery', army: 'french', small: false, corps: 'I',    imageHref: 'images/deSalles_I_front.png',    sp: 1, af: 4, er: 4, bwSP: 1, bwAF: 3, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: true  },
+  // II Corps (Reille) — 0611から3ヘックス以内
+  { id: 'foy_II',        col:  6, row: 11, type: 'infantry',  army: 'french', small: false, corps: 'II',   imageHref: 'images/foy_II_front.png',        sp: 5, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'bachelu_II',    col:  6, row: 12, type: 'infantry',  army: 'french', small: false, corps: 'II',   imageHref: 'images/bachelu_II_front.png',    sp: 4, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'jerome_II',     col:  7, row: 11, type: 'infantry',  army: 'french', small: false, corps: 'II',   imageHref: 'images/jerome_II_front.png',     sp: 7, af: 2, er: 4, bwSP: 5, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'pire_II',       col:  7, row: 12, type: 'LC',        army: 'french', small: false, corps: 'II',   imageHref: 'images/pire_II_front.png',       sp: 3, af: 1, er: 5, bwSP: 2, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'pellitier_II',  col:  6, row: 13, type: 'artillery', army: 'french', small: false, corps: 'II',   imageHref: 'images/pellitier_II_front.png',  sp: 1, af: 4, er: 4, bwSP: 1, bwAF: 3, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: true  },
+  // VI Corps (Lobau) — 1111から1ヘックス以内
+  { id: 'jeanin_VI',     col: 11, row: 11, type: 'infantry',  army: 'french', small: false, corps: 'VI',   imageHref: 'images/jeanin_VI_front.png',     sp: 3, af: 2, er: 4, bwSP: 2, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'simmer_VI',     col: 11, row: 12, type: 'infantry',  army: 'french', small: false, corps: 'VI',   imageHref: 'images/simmer_VI_front.png',     sp: 4, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'domon_VI',      col: 10, row: 12, type: 'LC',        army: 'french', small: false, corps: 'VI',   imageHref: 'images/domon_VI_front.png',      sp: 2, af: 1, er: 5, bwSP: 1, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'subervie_VI',   col: 12, row: 12, type: 'LC',        army: 'french', small: false, corps: 'VI',   imageHref: 'images/subervie_VI_front.png',   sp: 2, af: 1, er: 5, bwSP: 1, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'noury_VI',      col: 11, row: 13, type: 'artillery', army: 'french', small: false, corps: 'VI',   imageHref: 'images/noury_VI_front.png',      sp: 1, af: 4, er: 4, bwSP: 1, bwAF: 3, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: true  },
+  // III Cav Corps (Kellerman) — 0511から2ヘックス以内
+  { id: 'lheritier_IIIC', col:  5, row: 11, type: 'HC',       army: 'french', small: false, corps: 'IIIC', imageHref: 'images/lheritier_IIIC_front.png', sp: 3, af: 1, er: 5, bwSP: 2, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'dhurbal_IIIC',  col:  4, row: 11, type: 'HC',        army: 'french', small: false, corps: 'IIIC', imageHref: 'images/dhurbal_IIIC_front.png',  sp: 3, af: 1, er: 5, bwSP: 2, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  // IV Cav Corps (Milhaud) — 1411から2ヘックス以内
+  { id: 'delort_IVC',    col: 14, row: 11, type: 'HC',        army: 'french', small: false, corps: 'IVC',  imageHref: 'images/delort_IVC_front.png',    sp: 3, af: 1, er: 5, bwSP: 2, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  { id: 'wathier_IVC',   col: 15, row: 11, type: 'HC',        army: 'french', small: false, corps: 'IVC',  imageHref: 'images/wathier_IVC_front.png',   sp: 3, af: 1, er: 5, bwSP: 1, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  // IG（Drouot）— Guyot — 0512から2ヘックス以内
+  { id: 'guyot_IG',      col:  5, row: 12, type: 'HC',        army: 'french', small: false, corps: 'IG',   imageHref: 'images/guyot_IG_front.png',      sp: 4, af: 4, er: 6, bwSP: 3, bwAF: 3, bwER: 4, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
+  // IG（Drouot）— Lefeb-Desno — 1511から2ヘックス以内
+  { id: 'lefeb-desno_IG', col: 15, row: 12, type: 'LC',       army: 'french', small: false, corps: 'IG',   imageHref: 'images/lefeb-desno_IG_front.png', sp: 5, af: 4, er: 5, bwSP: 4, bwAF: 3, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false },
+  // IG（Drouot）— その他 — 1013から1ヘックス以内（small×2スタック）
+  { id: '1GR_IG',        col: 10, row: 13, type: 'artillery', army: 'french', small: true,  corps: 'IG',   imageHref: 'images/1GR_IG_front.png',        sp: 2, af: 6, er: 6, bwSP: 1, bwAF: 4, bwER: 5, hits: 0, battleworn: false, isHeavyArtillery: true,  isOG: true },
+  { id: '2GR_IG',        col: 10, row: 13, type: 'artillery', army: 'french', small: true,  corps: 'IG',   imageHref: 'images/2GR_IG_front.png',        sp: 2, af: 6, er: 6, bwSP: 1, bwAF: 4, bwER: 5, hits: 0, battleworn: false, isHeavyArtillery: true,  isOG: true },
+  { id: 'morand_IG',     col:  9, row: 13, type: 'infantry',  army: 'french', small: true,  corps: 'IG',   imageHref: 'images/morand_IG_front.png',     sp: 3, af: 3, er: 6, bwSP: 2, bwAF: 2, bwER: 5, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
+  { id: 'michel_IG',     col:  9, row: 13, type: 'infantry',  army: 'french', small: true,  corps: 'IG',   imageHref: 'images/michel_IG_front.png',     sp: 2, af: 3, er: 6, bwSP: 1, bwAF: 2, bwER: 5, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
+  { id: 'friant_IG',     col: 10, row: 14, type: 'infantry',  army: 'french', small: true,  corps: 'IG',   imageHref: 'images/friant_IG_front.png',     sp: 3, af: 3, er: 6, bwSP: 2, bwAF: 2, bwER: 5, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
+  { id: 'rouget_IG',     col: 10, row: 14, type: 'infantry',  army: 'french', small: true,  corps: 'IG',   imageHref: 'images/rouget_IG_front.png',     sp: 2, af: 3, er: 6, bwSP: 1, bwAF: 2, bwER: 5, hits: 0, battleworn: false, isHeavyArtillery: false, isOG: true },
+  { id: 'chartrand_IG',  col: 11, row: 13, type: 'infantry',  army: 'french', small: true,  corps: 'IG',   imageHref: 'images/chartrand_IG_front.png',  sp: 3, af: 3, er: 5, bwSP: 2, bwAF: 2, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, isYG: true },
+  { id: 'guye_IG',       col: 11, row: 13, type: 'infantry',  army: 'french', small: true,  corps: 'IG',   imageHref: 'images/guye_IG_front.png',       sp: 2, af: 3, er: 5, bwSP: 1, bwAF: 2, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, isYG: true },
+  // Grouchy variant（基本シナリオでは未使用 — offMap: true）
+  { id: 'hulot_IV',      col: 13, row: 15, type: 'infantry',  army: 'french', small: false, corps: 'IV',   imageHref: 'images/hulot_IV_front.png',      sp: 4, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, offMap: true },
+  { id: 'vichery_IV',    col: 14, row: 15, type: 'infantry',  army: 'french', small: false, corps: 'IV',   imageHref: 'images/vichery_IV_front.png',    sp: 4, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, offMap: true },
+  { id: 'pecheux_IV',    col: 13, row: 16, type: 'infantry',  army: 'french', small: false, corps: 'IV',   imageHref: 'images/pecheux_IV_front.png',    sp: 5, af: 2, er: 4, bwSP: 3, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, offMap: true },
+  { id: 'baltus_IV',     col: 14, row: 16, type: 'artillery', army: 'french', small: false, corps: 'IV',   imageHref: 'images/baltus_IV_front.png',     sp: 1, af: 4, er: 4, bwSP: 1, bwAF: 3, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: true,  offMap: true },
+  { id: 'chastel_IIC',   col: 12, row: 15, type: 'LC',        army: 'french', small: false, corps: 'IIC',  imageHref: 'images/chastel_IIC_front.png',   sp: 2, af: 1, er: 5, bwSP: 1, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, offMap: true },
+  { id: 'strolz_IIC',    col: 12, row: 16, type: 'LC',        army: 'french', small: false, corps: 'IIC',  imageHref: 'images/strolz_IIC_front.png',    sp: 3, af: 1, er: 5, bwSP: 2, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, offMap: true },
+  { id: 'maurin_IC',     col: 11, row: 15, type: 'LC',        army: 'french', small: false, corps: 'IC',   imageHref: 'images/maurin_IC_front.png',     sp: 3, af: 1, er: 5, bwSP: 2, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, offMap: true },
+  { id: 'soult_IC',      col: 11, row: 16, type: 'LC',        army: 'french', small: false, corps: 'IC',   imageHref: 'images/soult_IC_front.png',      sp: 2, af: 1, er: 5, bwSP: 1, bwAF: 1, bwER: 3, hits: 0, battleworn: false, isHeavyArtillery: false, offMap: true },
 
   // ============================================================
   // プロイセン軍（offMap: true で開始。deployPrussianCorps で配置）
@@ -1623,6 +1708,7 @@ function drawAllUnits() {
       }
     });
   }
+  renderVPPanel();
 }
 
 /** ユニットを移動し、選択解除・再描画 */
@@ -1668,13 +1754,14 @@ function getUnitStatus(unit) {
 
 /** 有効AF（Disrupted時 -1） */
 function getEffectiveAF(unit) {
-  const af = unit.af ?? 0;
-  return getUnitStatus(unit) === 'disrupted' ? Math.max(0, af - 1) : af;
+  const base = unit.battleworn && unit.bwAF != null ? unit.bwAF : (unit.af ?? 0);
+  return getUnitStatus(unit) === 'disrupted' ? Math.max(0, base - 1) : base;
 }
 
 /** 有効ER（Shaken/Disrupted時 -1、Wellington condition flags対応） */
 function getEffectiveER(unit) {
-  let er = unit.er ?? 4;
+  const base = unit.battleworn && unit.bwER != null ? unit.bwER : (unit.er ?? 4);
+  let er = base;
   const st = getUnitStatus(unit);
   if (st === 'shaken' || st === 'disrupted') er = Math.max(1, er - 1);
   if (unit.army === 'allied' && unit.type === 'infantry' && isBritish(unit)) {
@@ -2084,7 +2171,8 @@ function startBombardMode(unit) {
 
 /** 有効SP（Disrupted時 -1、Wellington condition flags対応） */
 function getEffectiveSP(unit) {
-  let sp = unit.sp ?? 0;
+  const base = unit.battleworn && unit.bwSP != null ? unit.bwSP : (unit.sp ?? 0);
+  let sp = base;
   if (getUnitStatus(unit) === 'disrupted') sp = Math.max(0, sp - 1);
   if (thinRedLine && unit.army === 'allied' && unit.type === 'infantry' && isBritish(unit)) sp++;
   return sp;
@@ -2644,8 +2732,31 @@ const VP_HEXES = [
 ];
 const ALL_VP_ADDRS = new Set(VP_HEXES.map(h => h.addr));
 
+// ヘックスラベル（VP表示名用）
+const HEX_LABEL = {
+  '0409': 'Hougoumont', '0204': 'Merbe-Braine', '0802': 'Mont St. Jean',
+  '1007': 'La Haye Sainte', '0903': 'MSJ Farm', '0104': 'Road to Hal',
+  '0301': 'Brussels Rd', '0401': 'Brussels Rd', '0701': 'Brussels Rd',
+  '0901': 'Brussels Rd', '1401': 'Brussels Rd', '1607': 'Papelotte',
+  '1412': 'Plancenoit', '1413': 'Plancenoit', '1512': 'Plancenoit',
+  '1110': 'La Belle Alliance', '1015': 'Rossomme',
+};
+
+const VICTORY_LEVELS = [
+  { min: 28, label: 'War-Winning Victory' },
+  { min: 24, label: 'Decisive Victory' },
+  { min: 20, label: 'Major Victory' },
+  { min: 16, label: 'Minor Victory' },
+  { min: 12, label: 'Standstill' },
+  { min:  8, label: 'Minor Defeat' },
+  { min:  4, label: 'Major Defeat' },
+  { min:  0, label: 'Catastrophe（歴史的結果）' },
+];
+
 // フランスコントロールヘックス（French unitが最後に占有したVPヘックス）
 const frenchControlHexes = new Set();
+// FLOCヘックスはゲーム開始時にフランスコントロール（フランス後方）
+VP_HEXES.filter(h => h.type === 'FLOC').forEach(h => frenchControlHexes.add(h.addr));
 
 function setAIHighlights(attackerAddr, targetAddr) {
   aiHighlightAddrs.clear();
@@ -4195,12 +4306,29 @@ function renderVPControlLayer() {
     const col = parseInt(addr.slice(0, 2), 10);
     const row = parseInt(addr.slice(2), 10);
     const { x, y } = layout.hexToPixel(toIdx(col), toIdx(row));
-    // 赤い小さな星形マーカー
     const star = makeSVGEl('text', {
       x, y: y + 5,
       'text-anchor': 'middle',
       'font-size': '22',
       fill: '#e03030',
+      opacity: '0.85',
+      'pointer-events': 'none',
+    });
+    star.textContent = '★';
+    vpControlLayerEl.appendChild(star);
+  }
+  // FLOCヘックスが連合軍コントロールの場合、青マーカーを表示
+  for (const h of VP_HEXES) {
+    if (h.type !== 'FLOC') continue;
+    if (frenchControlHexes.has(h.addr)) continue;
+    const col = parseInt(h.addr.slice(0, 2), 10);
+    const row = parseInt(h.addr.slice(2), 10);
+    const { x, y } = layout.hexToPixel(toIdx(col), toIdx(row));
+    const star = makeSVGEl('text', {
+      x, y: y + 5,
+      'text-anchor': 'middle',
+      'font-size': '22',
+      fill: '#3090e0',
       opacity: '0.85',
       'pointer-events': 'none',
     });
@@ -4222,6 +4350,122 @@ function clearFrenchControl(addr) {
   if (!frenchControlHexes.has(addr)) return;
   frenchControlHexes.delete(addr);
   renderVPControlLayer();
+}
+
+// ============================================================
+// VP計算・勝利判定
+// ============================================================
+
+/**
+ * 全VPを計算して内訳付きの結果を返す。
+ * @returns {{ total: number, rows: Array<{label,vp,sign}> }}
+ */
+function calcVP() {
+  const rows = [];
+  let total = 0;
+
+  // ヘックスVP
+  for (const h of VP_HEXES) {
+    const isFrench = frenchControlHexes.has(h.addr);
+    let countThisHex = false;
+    if (h.type === 'FLOC') {
+      // FLOCは連合軍コントロール（フランス非保持）で負VP
+      if (!isFrench) countThisHex = true;
+    } else {
+      // ALOC/WB/Bはフランスコントロールで正VP
+      if (isFrench) countThisHex = true;
+    }
+    if (!countThisHex) continue;
+    const label = HEX_LABEL[h.addr] ? `${h.addr} ${HEX_LABEL[h.addr]}` : h.addr;
+    rows.push({ label, vp: h.vp, sign: h.vp >= 0 ? 'pos' : 'neg' });
+    total += h.vp;
+  }
+
+  // ユニットダメージVP
+  for (const u of units) {
+    if (u.offMap) continue;
+
+    // +2: British大型Infantryユニット消滅
+    if (u.army === 'allied' && u.type === 'infantry' && !u.small
+        && isBritish(u) && !u.isDetachment
+        && (u.eliminated || (u.battleworn && u.hits >= 3))) {
+      rows.push({ label: `${u.id} 消滅`, vp: 2, sign: 'pos' });
+      total += 2;
+    }
+
+    // -3: OGユニット Battleworn
+    if (u.isOG && u.battleworn) {
+      rows.push({ label: `${u.id} (OG) BW`, vp: -3, sign: 'neg' });
+      total -= 3;
+    }
+
+    // -2: YGユニット Battleworn
+    if (u.isYG && u.battleworn) {
+      rows.push({ label: `${u.id} (YG) BW`, vp: -2, sign: 'neg' });
+      total -= 2;
+    }
+
+    // -1: IG Artillery/Cavalry Battleworn（OG/YGでない）
+    if (u.army === 'french' && u.id.endsWith('_IG')
+        && (u.type === 'artillery' || u.type === 'HC' || u.type === 'LC')
+        && !u.isOG && !u.isYG && u.battleworn) {
+      rows.push({ label: `${u.id} (IG) BW`, vp: -1, sign: 'neg' });
+      total -= 1;
+    }
+  }
+
+  return { total, rows };
+}
+
+function getVictoryLevel(vp) {
+  for (const v of VICTORY_LEVELS) {
+    if (vp >= v.min) return v.label;
+  }
+  return 'Catastrophe（歴史的結果）';
+}
+
+function renderVPPanel() {
+  const { total, rows } = calcVP();
+  const level = getVictoryLevel(total);
+  const numEl = document.getElementById('vp-total-num');
+  const levelEl = document.getElementById('vp-level-str');
+  const rowsEl = document.getElementById('vp-rows');
+  if (!numEl) return;
+  numEl.textContent = total >= 0 ? `+${total}` : `${total}`;
+  numEl.style.color = total >= 12 ? '#6f6' : total >= 0 ? '#ffd700' : '#f88';
+  levelEl.textContent = `— ${level} —`;
+  rowsEl.innerHTML = rows.map(r =>
+    `<div class="vp-row ${r.sign}"><span>${r.label}</span><span>${r.vp >= 0 ? '+' : ''}${r.vp}</span></div>`
+  ).join('') || '<div style="color:#555;font-size:11px;padding:2px 0">— なし —</div>';
+}
+
+function showEndGameModal(total, level, rows) {
+  const el = document.getElementById('endgame-modal');
+  document.getElementById('endgame-level').textContent = level;
+  document.getElementById('endgame-total').textContent = `合計 VP：${total >= 0 ? '+' : ''}${total}`;
+
+  const hexR = rows.filter(r => r.label.match(/^\d{4}/));
+  const unitR = rows.filter(r => !r.label.match(/^\d{4}/));
+
+  let html = '';
+  if (hexR.length) {
+    html += '<div class="eg-section">ヘックスVP</div>';
+    html += hexR.map(r => `<div class="eg-row ${r.sign}"><span>${r.label}</span><span>${r.vp >= 0 ? '+' : ''}${r.vp}</span></div>`).join('');
+  }
+  if (unitR.length) {
+    html += '<div class="eg-section">ユニットVP</div>';
+    html += unitR.map(r => `<div class="eg-row ${r.sign}"><span>${r.label}</span><span>${r.vp >= 0 ? '+' : ''}${r.vp}</span></div>`).join('');
+  }
+  if (!rows.length) html = '<div style="color:#555;font-size:11px">VPなし</div>';
+  document.getElementById('endgame-breakdown').innerHTML = html;
+  el.classList.remove('hidden');
+}
+
+function endGame() {
+  const { total, rows } = calcVP();
+  const level = getVictoryLevel(total);
+  addCombatLog(`━━━ ゲーム終了 VP: ${total >= 0 ? '+' : ''}${total}（${level}）━━━`);
+  showEndGameModal(total, level, rows);
 }
 
 // ---- メインディスパッチャー ----
@@ -4410,6 +4654,7 @@ const TYPE_LABEL_JP = {
 
 // ---- UI更新 ----
 function renderChitUI(state) {
+  renderVPPanel();
   // ターンバッジ
   elTurnBadge.textContent = `ターン ${state.turn} / 12`;
 
@@ -4740,16 +4985,29 @@ elBtnEndTurn.addEventListener('click', () => {
     const deploySeq = r.arrivedCorps.map(m => done => deployPrussianCorps(m, done));
     executeActionsSequentially(deploySeq, () => {});
   }
+  renderVPPanel();
   if (r.gameOver) {
-    setTimeout(() => alert('ゲーム終了！VP計算を行ってください。'), 100);
+    setTimeout(() => endGame(), 200);
   }
 });
 
 // ---- 変更リスナー登録 ----
 cps.on(renderChitUI);
 
+// ---- 終了モーダル閉じる ----
+document.getElementById('btn-endgame-close').addEventListener('click', () => {
+  document.getElementById('endgame-modal').classList.add('hidden');
+});
+
+// ---- VP確認ボタン ----
+document.getElementById('btn-check-vp').addEventListener('click', () => {
+  const { total, rows } = calcVP();
+  showEndGameModal(total, getVictoryLevel(total), rows);
+});
+
 // ---- 初期描画 ----
 renderChitUI(cps.getState());
+renderVPPanel();
 renderConditionsPanel();
 renderNapoleonConditions();
 renderOffMapPanel();

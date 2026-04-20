@@ -199,17 +199,17 @@ function getUnitStatus(unit) {
   }
 }
 function getEffectiveAF(unit) {
-  const af = unit.af ?? 0;
-  return getUnitStatus(unit) === 'disrupted' ? Math.max(0, af-1) : af;
+  const base = unit.battleworn && unit.bwAF != null ? unit.bwAF : (unit.af ?? 0);
+  return getUnitStatus(unit) === 'disrupted' ? Math.max(0, base-1) : base;
 }
 function getEffectiveER(unit) {
-  const er = unit.er ?? 4;
+  const base = unit.battleworn && unit.bwER != null ? unit.bwER : (unit.er ?? 4);
   const st = getUnitStatus(unit);
-  return (st === 'shaken' || st === 'disrupted') ? Math.max(1, er-1) : er;
+  return (st === 'shaken' || st === 'disrupted') ? Math.max(1, base-1) : base;
 }
 function getEffectiveSP(unit) {
-  const sp = unit.sp ?? 0;
-  return getUnitStatus(unit) === 'disrupted' ? Math.max(0, sp-1) : sp;
+  const base = unit.battleworn && unit.bwSP != null ? unit.bwSP : (unit.sp ?? 0);
+  return getUnitStatus(unit) === 'disrupted' ? Math.max(0, base-1) : base;
 }
 
 // ============================================================
@@ -1808,7 +1808,8 @@ function isBritish(unit) { return BRITISH_UNIT_IDS_T.has(unit.id); }
 
 // getEffectiveER の Wellington 修正込み版
 function getEffectiveER_W(unit) {
-  let er = unit.er ?? 4;
+  const base = unit.battleworn && unit.bwER != null ? unit.bwER : (unit.er ?? 4);
+  let er = base;
   const st = getUnitStatus(unit);
   if (st === 'shaken' || st === 'disrupted') er = Math.max(1, er - 1);
   if (unit.army === 'allied' && unit.type === 'infantry' && isBritish(unit)) {
@@ -1818,7 +1819,8 @@ function getEffectiveER_W(unit) {
   return er;
 }
 function getEffectiveSP_W(unit) {
-  let sp = unit.sp ?? 0;
+  const base = unit.battleworn && unit.bwSP != null ? unit.bwSP : (unit.sp ?? 0);
+  let sp = base;
   if (getUnitStatus(unit) === 'disrupted') sp = Math.max(0, sp - 1);
   if (thinRedLine && unit.army === 'allied' && unit.type === 'infantry' && isBritish(unit)) sp++;
   return sp;
@@ -3173,6 +3175,130 @@ test('⑦ Papelotte: 隣接フランスあり → 何もしない', () => {
   const r = resolvePapelotte_DT();
   expect(r.action, 'noop').toBe('noop');
   expect(det.hits, 'no rally').toBe(1);
+});
+
+// ============================================================
+// VP計算・勝利判定
+// ============================================================
+section('VP計算・勝利判定');
+
+// スタンドアロン用定義
+const VP_HEXES_VP = [
+  { addr:'0409', vp: 6, type:'WB'   }, { addr:'0204', vp: 5, type:'ALOC' },
+  { addr:'0802', vp: 5, type:'ALOC' }, { addr:'1007', vp: 4, type:'WB'   },
+  { addr:'0903', vp: 3, type:'ALOC' }, { addr:'0104', vp: 3, type:'ALOC' },
+  { addr:'0301', vp: 3, type:'ALOC' }, { addr:'0401', vp: 3, type:'ALOC' },
+  { addr:'0701', vp: 3, type:'ALOC' }, { addr:'0901', vp: 3, type:'ALOC' },
+  { addr:'1401', vp: 3, type:'ALOC' }, { addr:'1607', vp: 2, type:'WB'   },
+  { addr:'1412', vp: 1, type:'B'    }, { addr:'1413', vp: 1, type:'B'    },
+  { addr:'1512', vp: 1, type:'B'    }, { addr:'1110', vp:-4, type:'FLOC' },
+  { addr:'1015', vp:-6, type:'FLOC' },
+];
+const HEX_LABEL_VP = {
+  '0409':'Hougoumont','0204':'Merbe-Braine','0802':'Mont St. Jean',
+  '1007':'La Haye Sainte','0903':'MSJ Farm','0104':'Road to Hal',
+  '0301':'Brussels Rd','0401':'Brussels Rd','0701':'Brussels Rd',
+  '0901':'Brussels Rd','1401':'Brussels Rd','1607':'Papelotte',
+  '1412':'Plancenoit','1413':'Plancenoit','1512':'Plancenoit',
+  '1110':'La Belle Alliance','1015':'Rossomme',
+};
+const VICTORY_LEVELS_VP = [
+  { min:28, label:'War-Winning Victory' }, { min:24, label:'Decisive Victory' },
+  { min:20, label:'Major Victory' },       { min:16, label:'Minor Victory' },
+  { min:12, label:'Standstill' },          { min: 8, label:'Minor Defeat' },
+  { min: 4, label:'Major Defeat' },        { min: 0, label:'Catastrophe（歴史的結果）' },
+];
+function getVictoryLevel_VP(vp) {
+  for (const v of VICTORY_LEVELS_VP) { if (vp >= v.min) return v.label; }
+  return 'Catastrophe（歴史的結果）';
+}
+function calcVP_VP(frenchControl, testUnits) {
+  const rows = []; let total = 0;
+  for (const h of VP_HEXES_VP) {
+    const isFrench = frenchControl.has(h.addr);
+    const count = h.type === 'FLOC' ? !isFrench : isFrench;
+    if (!count) continue;
+    const label = HEX_LABEL_VP[h.addr] ? `${h.addr} ${HEX_LABEL_VP[h.addr]}` : h.addr;
+    rows.push({ label, vp: h.vp }); total += h.vp;
+  }
+  for (const u of testUnits) {
+    if (u.offMap) continue;
+    if (u.army==='allied' && u.type==='infantry' && !u.small && isBritish(u)
+        && !u.isDetachment && (u.eliminated || (u.battleworn && u.hits >= 3))) {
+      rows.push({ label:`${u.id} 消滅`, vp:2 }); total += 2;
+    }
+    if (u.isOG && u.battleworn) { rows.push({ label:`${u.id} (OG) BW`, vp:-3 }); total -= 3; }
+    if (u.isYG && u.battleworn) { rows.push({ label:`${u.id} (YG) BW`, vp:-2 }); total -= 2; }
+    if (u.army==='french' && u.id.endsWith('_IG')
+        && (u.type==='artillery'||u.type==='HC'||u.type==='LC')
+        && !u.isOG && !u.isYG && u.battleworn) {
+      rows.push({ label:`${u.id} (IG) BW`, vp:-1 }); total -= 1;
+    }
+  }
+  return { total, rows };
+}
+
+test('① 全ヘックス未占領（フランス）→ VP=0', () => {
+  const fc = new Set();
+  fc.add('1110'); fc.add('1015'); // FLOC初期化
+  const { total } = calcVP_VP(fc, []);
+  expect(total, 'VP=0').toBe(0);
+});
+
+test('② Hougoumont(0409)フランス占領 → VP+6', () => {
+  const fc = new Set(['1110','1015','0409']);
+  const { total } = calcVP_VP(fc, []);
+  expect(total, 'VP=6').toBe(6);
+});
+
+test('③ Rossomme(1015)連合軍占領 → VP-6', () => {
+  const fc = new Set(['1110']); // 1015 not in frenchControl → Allied
+  const { total } = calcVP_VP(fc, []);
+  expect(total, 'VP=-6').toBe(-6);
+});
+
+test('④ OGユニット Battleworn → -3', () => {
+  const fc = new Set(['1110','1015']);
+  const u = mkUnit({ id:'friant_IG', army:'french', type:'infantry', isOG:true, battleworn:true });
+  const { total } = calcVP_VP(fc, [u]);
+  expect(total, 'VP=-3').toBe(-3);
+});
+
+test('⑤ YGユニット Battleworn → -2', () => {
+  const fc = new Set(['1110','1015']);
+  const u = mkUnit({ id:'chartrand_IG', army:'french', type:'infantry', isYG:true, battleworn:true });
+  const { total } = calcVP_VP(fc, [u]);
+  expect(total, 'VP=-2').toBe(-2);
+});
+
+test('⑥ IG Cav(LC) Battleworn → -1（lefeb-desno: OG/YGでない）', () => {
+  const fc = new Set(['1110','1015']);
+  const u = mkUnit({ id:'lefeb-desno_IG', army:'french', type:'LC', battleworn:true });
+  const { total } = calcVP_VP(fc, [u]);
+  expect(total, 'VP=-1').toBe(-1);
+});
+
+test('⑦ British大型Infantry消滅（BW+hits≥3） → +2', () => {
+  const fc = new Set(['1110','1015']);
+  const u = mkUnit({ id:'picton_RC', army:'allied', type:'infantry', small:false,
+                     isDetachment:false, battleworn:true, hits:3 });
+  const { total } = calcVP_VP(fc, [u]);
+  expect(total, 'VP=+2').toBe(2);
+});
+
+test('⑧ getVictoryLevel: 0→Catastrophe, 12→Standstill, 28→War-Winning', () => {
+  expect(getVictoryLevel_VP(0),  '0=Catastrophe').toBe('Catastrophe（歴史的結果）');
+  expect(getVictoryLevel_VP(12), '12=Standstill').toBe('Standstill');
+  expect(getVictoryLevel_VP(28), '28=War-Winning').toBe('War-Winning Victory');
+  expect(getVictoryLevel_VP(-5), '-5=Catastrophe').toBe('Catastrophe（歴史的結果）');
+});
+
+test('⑨ 複数ヘックス + ユニット複合', () => {
+  // Brussels Rd x3 (+9), Hougoumont (+6), OG BW (-3) = 12
+  const fc = new Set(['1110','1015','0301','0401','0701','0409']);
+  const og = mkUnit({ id:'morand_IG', army:'french', type:'infantry', isOG:true, battleworn:true });
+  const { total } = calcVP_VP(fc, [og]);
+  expect(total, 'VP=12').toBe(12);
 });
 
 // ============================================================
