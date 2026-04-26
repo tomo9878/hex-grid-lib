@@ -410,6 +410,21 @@ class ChitPullSystem {
     };
   }
 
+  /**
+   * セーブデータから内部状態を復元する
+   */
+  loadState(state) {
+    this.turn          = state.turn;
+    this.cup           = state.cup.map(m => ({ ...m }));
+    this.drawn         = state.drawn ? { ...state.drawn } : null;
+    this.discarded     = state.discarded.map(m => ({ ...m }));
+    this.heldNapoleon  = state.heldNapoleon.map(m => ({ ...m }));
+    this.heldFrench    = state.heldFrench ? { ...state.heldFrench } : null;
+    this.trtMarkers    = state.trtMarkers.map(m => ({ ...m }));
+    this.log           = [...state.log];
+    this._fire();
+  }
+
   // カップ内のマーカーを種別ごとに集計
   getCupBreakdown() {
     const counts = {};
